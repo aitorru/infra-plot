@@ -16,6 +16,8 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${port}`,
     trace: "retain-on-failure",
+    // WebGL for the 3D view: headless Chromium only falls back to SwiftShader when asked.
+    launchOptions: { args: ["--enable-unsafe-swiftshader", "--use-angle=swiftshader"] },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {

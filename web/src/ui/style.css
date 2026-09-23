@@ -254,11 +254,34 @@ button.active .icon {
 .view3d {
   position: absolute;
   inset: 0;
+}
+
+.view3d[data-webgl="unavailable"] {
+  display: grid;
+  place-items: center;
+}
+
+.canvas3d {
+  display: block;
+  touch-action: none;
+}
+
+.toolbar3d {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.toolbar3d .hint {
+  font-size: 13px;
+  padding: 0 4px;
 }
 
 /* ?embed=1: just the canvas. */
@@ -269,7 +292,7 @@ button.active .icon {
 #app.embed .topbar,
 #app.embed .palette,
 #app.embed .props,
-#app.embed .view3d button {
+#app.embed .toolbar3d {
   display: none;
 }
 
