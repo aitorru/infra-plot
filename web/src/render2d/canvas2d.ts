@@ -17,7 +17,7 @@ import {
   snap,
   zoneBox,
 } from "../model/geometry";
-import { addEdge, addNode, addZone, moveElement } from "../state/ops";
+import { addEdge, addNode, addZone, moveElement, zoneContents } from "../state/ops";
 import type { Store } from "../state/store";
 import { arrowHead, drawGlyph, svgText } from "./glyphs";
 
@@ -33,7 +33,14 @@ type Handle = "nw" | "ne" | "sw" | "se";
 
 type Drag =
   | { kind: "pan"; sx: number; sy: number; cam: Camera }
-  | { kind: "move"; id: string; last: Point; moved: boolean; free: boolean }
+  | {
+      kind: "move";
+      id: string;
+      last: Point;
+      moved: boolean;
+      free: boolean;
+      contents: ReadonlySet<string>;
+    }
   | { kind: "resize"; id: string; handle: Handle; orig: Box; start: Point; moved: boolean }
   | { kind: "zone"; start: Point; cur: Point }
   | { kind: "connect"; from: string; cur: Point }
@@ -200,6 +207,14 @@ export class Canvas2D {
   render(): void {
     const { doc, selection } = this.#store.state;
     const seen = new Set<string>();
+    const next: Record<LayerName, number> = {
+      zones: 0,
+      lines: 0,
+      edges: 0,
+      nodes: 0,
+      notes: 0,
+      overlay: 0,
+    };
     const place = (layer: LayerName, id: string, key: string, draw: () => SVGGElement) => {
       seen.add(id);
       const fullKey = `${this.#generation}|${key}`;
@@ -209,7 +224,11 @@ export class Canvas2D {
         entry = { key: fullKey, g: draw() };
         this.#cache.set(id, entry);
       }
-      this.#layers[layer].appendChild(entry.g); // re-appending keeps document order
+      // Keep document order, but only move nodes that are out of place: detaching the
+      // element under the pointer makes the browser drop the next dblclick.
+      const g = this.#layers[layer];
+      const at = g.children[next[layer]++] ?? null;
+      if (at !== entry.g) g.insertBefore(entry.g, at);
     };
 
     for (const z of doc.zones) place("zones", z.id, JSON.stringify(z), () => this.#drawZone(z));
@@ -554,7 +573,14 @@ export class Canvas2D {
         }
         if (hit) {
           this.#store.set({ selection: hit.id });
-          this.#drag = { kind: "move", id: hit.id, last: snapped, moved: false, free };
+          this.#drag = {
+            kind: "move",
+            id: hit.id,
+            last: snapped,
+            moved: false,
+            free,
+            contents: zoneContents(this.#store.doc, hit.id),
+          };
         } else {
           this.#store.set({ selection: null });
         }
@@ -592,7 +618,8 @@ export class Canvas2D {
           doc.notes.push({ id, x: snapped[0], y: snapped[1], text: "Text", size: "m" });
         });
         this.#store.set({ selection: id, tool: { type: "select" } });
-        requestFocusLabel();
+        // After the mousedown that follows, which would otherwise blur the field.
+        setTimeout(requestFocusLabel);
         return;
       }
     }
@@ -619,7 +646,9 @@ export class Canvas2D {
         if (!d.moved) this.#store.checkpoint();
         d.moved = true;
         d.last = p;
-        this.#store.mutate((doc) => moveElement(doc, d.id, dx, dy, !e.shiftKey));
+        this.#store.mutate((doc) =>
+          moveElement(doc, d.id, dx, dy, e.shiftKey ? new Set() : d.contents),
+        );
         return;
       }
       case "resize": {

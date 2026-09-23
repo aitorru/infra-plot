@@ -56,16 +56,32 @@ export function addEdge(doc: Doc, from: string, to: string): Edge | undefined {
   return edge;
 }
 
+/** Ids of everything fully inside zone `id`: what moving the zone drags along. */
+export function zoneContents(doc: Doc, id: string): Set<string> {
+  const zone = doc.zones.find((z) => z.id === id);
+  const inside = new Set<string>();
+  if (!zone) return inside;
+  const outer = zoneBox(zone);
+  for (const z of doc.zones) if (z !== zone && contains(outer, zoneBox(z))) inside.add(z.id);
+  for (const n of doc.nodes) if (contains(outer, nodeBox(n))) inside.add(n.id);
+  for (const n of doc.notes) if (contains(outer, noteBox(n))) inside.add(n.id);
+  for (const l of doc.lines) {
+    if (l.points.every(([x, y]) => contains(outer, { x, y, w: 0, h: 0 }))) inside.add(l.id);
+  }
+  return inside;
+}
+
 /**
- * Moves an element by (dx, dy). Moving a zone drags along everything fully
- * inside it, so a VPC can be repositioned with its contents.
+ * Moves an element by (dx, dy). Moving a zone drags along its contents, so a
+ * VPC can be repositioned with everything in it. Drags pass the contents taken
+ * when they started, so the zone doesn't sweep up what it passes over.
  */
 export function moveElement(
   doc: Doc,
   id: string,
   dx: number,
   dy: number,
-  withContents = true,
+  contents: ReadonlySet<string> = zoneContents(doc, id),
 ): void {
   const found = findElement(doc, id);
   if (!found) return;
@@ -80,37 +96,19 @@ export function moveElement(
       break;
     case "edge":
       break;
-    case "zone": {
-      const outer = zoneBox(found.el);
-      if (withContents) {
-        for (const z of doc.zones) {
-          if (z !== found.el && contains(outer, zoneBox(z))) {
-            z.x += dx;
-            z.y += dy;
-          }
+    case "zone":
+      for (const other of [...doc.zones, ...doc.nodes, ...doc.notes]) {
+        if (contents.has(other.id)) {
+          other.x += dx;
+          other.y += dy;
         }
-        for (const n of doc.nodes) {
-          if (contains(outer, nodeBox(n))) {
-            n.x += dx;
-            n.y += dy;
-          }
-        }
-        for (const n of doc.notes) {
-          if (contains(outer, noteBox(n))) {
-            n.x += dx;
-            n.y += dy;
-          }
-        }
-        for (const l of doc.lines) {
-          if (l.points.every(([x, y]) => contains(outer, { x, y, w: 0, h: 0 }))) {
-            l.points = l.points.map(([x, y]) => [x + dx, y + dy]);
-          }
-        }
+      }
+      for (const l of doc.lines) {
+        if (contents.has(l.id)) l.points = l.points.map(([x, y]) => [x + dx, y + dy]);
       }
       found.el.x += dx;
       found.el.y += dy;
       break;
-    }
   }
 }
 
