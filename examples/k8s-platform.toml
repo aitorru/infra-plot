@@ -1,0 +1,224 @@
+version = 1
+title = "Kubernetes platform"
+description = "An ingress-fronted cluster with two namespaces, managed data services and monitoring."
+
+[[zones]]
+id = "cluster"
+kind = "k8s-cluster"
+label = "prod cluster"
+x = 180
+y = 0
+w = 720
+h = 520
+
+[[zones]]
+id = "ns-ingress"
+kind = "namespace"
+label = "ingress-nginx"
+x = 200
+y = 60
+w = 180
+h = 440
+
+[[zones]]
+id = "ns-shop"
+kind = "namespace"
+label = "shop"
+x = 400
+y = 60
+w = 480
+h = 300
+
+[[zones]]
+id = "ns-observability"
+kind = "namespace"
+label = "observability"
+x = 400
+y = 380
+w = 480
+h = 120
+
+[[zones]]
+id = "managed"
+kind = "generic"
+label = "managed services"
+x = 960
+y = 60
+w = 200
+h = 440
+
+[[nodes]]
+id = "internet"
+kind = "internet"
+label = "Internet"
+x = 60
+y = 120
+
+[[nodes]]
+id = "dns"
+kind = "dns"
+label = "shop.example.com"
+x = 60
+y = 300
+
+[[nodes]]
+id = "ingress"
+kind = "proxy"
+label = "ingress"
+x = 290
+y = 220
+
+[[nodes]]
+id = "control-plane"
+kind = "k8s"
+label = "control plane"
+x = 290
+y = 400
+
+[[nodes]]
+id = "web"
+kind = "pod"
+label = "web ×3"
+x = 480
+y = 160
+
+[[nodes]]
+id = "api"
+kind = "pod"
+label = "api ×3"
+x = 640
+y = 160
+
+[nodes.meta]
+image = "shop/api:1.42"
+replicas = "3"
+
+[[nodes]]
+id = "worker"
+kind = "container"
+label = "worker"
+x = 640
+y = 290
+
+[[nodes]]
+id = "orders"
+kind = "queue"
+label = "orders"
+x = 800
+y = 290
+
+[[nodes]]
+id = "prometheus"
+kind = "monitoring"
+label = "Prometheus"
+x = 500
+y = 440
+
+[[nodes]]
+id = "grafana"
+kind = "monitoring"
+label = "Grafana"
+x = 700
+y = 440
+
+[[nodes]]
+id = "db"
+kind = "database"
+label = "Cloud SQL"
+x = 1060
+y = 160
+
+[[nodes]]
+id = "cache"
+kind = "cache"
+label = "Memorystore"
+x = 1060
+y = 300
+
+[[nodes]]
+id = "bucket"
+kind = "storage"
+label = "assets bucket"
+x = 1060
+y = 430
+
+[[edges]]
+id = "internet-ingress"
+from = "internet"
+to = "ingress"
+label = "443"
+
+[[edges]]
+id = "dns-internet"
+from = "dns"
+to = "internet"
+style = "dotted"
+arrow = "none"
+
+[[edges]]
+id = "ingress-web"
+from = "ingress"
+to = "web"
+
+[[edges]]
+id = "web-api"
+from = "web"
+to = "api"
+label = "gRPC"
+
+[[edges]]
+id = "api-orders"
+from = "api"
+to = "orders"
+route = "orthogonal"
+
+[[edges]]
+id = "orders-worker"
+from = "orders"
+to = "worker"
+
+[[edges]]
+id = "api-db"
+from = "api"
+to = "db"
+
+[[edges]]
+id = "api-cache"
+from = "api"
+to = "cache"
+style = "dashed"
+route = "orthogonal"
+
+[[edges]]
+id = "worker-bucket"
+from = "worker"
+to = "bucket"
+route = "orthogonal"
+
+[[edges]]
+id = "prometheus-grafana"
+from = "prometheus"
+to = "grafana"
+arrow = "start"
+
+[[edges]]
+id = "scrape"
+from = "prometheus"
+to = "ns-shop"
+label = "scrape"
+style = "dashed"
+
+[[lines]]
+id = "boundary"
+style = "dashed"
+arrow = "none"
+color = "#c92a2a"
+points = [[940, -20], [940, 540]]
+
+[[notes]]
+id = "note-boundary"
+x = 950
+y = 520
+text = "VPC peering"
+size = "s"
+color = "#c92a2a"

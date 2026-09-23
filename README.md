@@ -27,6 +27,35 @@ El shell por defecto es mínimo para no llenar el disco:
 
 Las cachés de cargo y pnpm viven en `.devenv/state/`, junto al repo.
 
+## Uso del editor
+
+### URLs
+
+| URL | Efecto |
+| --- | --- |
+| `/d/<id>` | Abre el diagrama `<id>` guardado en el servidor |
+| `?view=3d` | Arranca en la vista 3D |
+| `?embed=1` | Solo el lienzo, sin barras ni paneles (para capturas o iframes); `#app[data-ready]` indica que ya está dibujado |
+| `?src=<url>` | Carga un JSON/TOML desde esa URL (sujeto a CORS) |
+
+### Atajos
+
+| Tecla | Acción |
+| --- | --- |
+| `V` / `H` | Seleccionar / mover lienzo (o mantener `Espacio`) |
+| `R` / `C` / `L` / `T` | Zona / conectar / línea libre / nota |
+| `2` / `3` | Vista 2D / 3D |
+| `F` | Encajar el diagrama |
+| `Supr` | Borrar la selección (y sus edges) |
+| `Ctrl+Z` / `Ctrl+Y` | Deshacer / rehacer |
+| `Ctrl+D` | Duplicar |
+| `Ctrl+S` / `Ctrl+O` | Guardar en el servidor / abrir (servidor y ejemplos) |
+| `Esc` | Cancelar el borrador o deseleccionar |
+
+Los ficheros `.json`/`.toml` se importan con «Import…» o arrastrándolos a la ventana. Los
+exports SVG y PNG (2×) llevan la fuente Kalam incrustada, así que se ven igual sin conexión.
+Los ejemplos de `examples/` aparecen en «Open…».
+
 ## CI
 
 `.github/workflows/ci.yml` ejecuta en cada PR:

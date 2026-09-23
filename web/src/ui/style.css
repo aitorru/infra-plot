@@ -12,6 +12,14 @@
   box-sizing: border-box;
 }
 
+.stage > [hidden] {
+  display: none;
+}
+
+.muted {
+  opacity: 0.6;
+}
+
 html,
 body,
 #app {
@@ -49,6 +57,19 @@ body,
   flex: 1;
 }
 
+.topbar .group {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.topbar .segmented {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1px;
+  gap: 0;
+}
+
 button {
   font: inherit;
   border: 1px solid var(--line);
@@ -66,6 +87,10 @@ button.active {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+
+.segmented button {
+  border-color: transparent;
 }
 
 button:disabled {
@@ -105,9 +130,25 @@ button:disabled {
 }
 
 .palette .grid button {
-  font-size: 13px;
-  padding: 2px 4px;
-  border-left-width: 6px;
+  font-size: 12px;
+  padding: 4px 2px 2px;
+  line-height: 1.1;
+}
+
+.palette .tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.palette .icon {
+  width: 36px;
+  height: 36px;
+}
+
+button.active .icon {
+  filter: drop-shadow(0 0 1px #fff);
 }
 
 .tools {
@@ -138,6 +179,43 @@ button:disabled {
   display: block;
   font-size: 13px;
   margin-top: 6px;
+}
+
+.props label > span {
+  display: block;
+  opacity: 0.7;
+}
+
+.props .row {
+  display: flex;
+  gap: 4px;
+}
+
+.props input[type="color"] {
+  padding: 0;
+  height: 28px;
+}
+
+.props .row button {
+  flex: none;
+}
+
+.props .stats {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.props .meta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.props .actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 16px;
 }
 
 .props input,
@@ -171,4 +249,91 @@ button:disabled {
 
 .toast.error {
   background: #c92a2a;
+}
+
+.view3d {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* ?embed=1: just the canvas. */
+#app.embed {
+  grid-template: "stage" 1fr / 1fr;
+}
+
+#app.embed .topbar,
+#app.embed .palette,
+#app.embed .props,
+#app.embed .view3d button {
+  display: none;
+}
+
+#app.dropping .stage {
+  outline: 3px dashed var(--accent);
+  outline-offset: -12px;
+}
+
+.library {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 16px;
+  width: min(520px, 92vw);
+  max-height: 80vh;
+  font: inherit;
+  color: inherit;
+  background: var(--panel);
+}
+
+.library::backdrop {
+  background: rgb(0 0 0 / 0.25);
+}
+
+.library header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.library h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.library h3 {
+  margin: 12px 0 4px;
+  font-size: 14px;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.library .list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.library li {
+  display: flex;
+  gap: 4px;
+}
+
+.library li > button:first-child {
+  flex: 1;
+  text-align: left;
+}
+
+.library small {
+  opacity: 0.6;
+}
+
+button.danger:hover {
+  border-color: #c92a2a;
 }

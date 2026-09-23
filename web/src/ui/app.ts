@@ -1,63 +1,38 @@
-/** The editor shell: top bar, palette, properties panel, shortcuts and persistence. */
+/** The editor shell: top bar, palette, properties panel, shortcuts, routing and persistence. */
 import { NODE_KINDS, nodeKinds, ZONE_KINDS, zoneKinds } from "../model/catalog";
 import {
+  type Doc,
   detectFormat,
   emptyDoc,
   type Format,
-  findElement,
   type Issue,
   parseDocument,
   serialize,
 } from "../model/doc";
 import { Canvas2D, isTyping } from "../render2d/canvas2d";
-import { deleteElement, duplicateElement, renameId } from "../state/ops";
-import { type State, Store, type Tool } from "../state/store";
+import { deleteElement, duplicateElement } from "../state/ops";
+import { Store, type Tool, type View } from "../state/store";
+import { button, download, downloadBlob, h, slug } from "./dom";
+import { embeddedFontCss, svgToPng } from "./export";
+import { nodeIcon, zoneIcon } from "./icons";
+import { type Example, Library } from "./library";
+import { PropsPanel } from "./props";
+import { parseRoute, updateRoute } from "./route";
 
 const AUTOSAVE_KEY = "infraplot:autosave";
-
-function h<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  props: Partial<Record<string, string>> = {},
-  ...children: (Node | string)[]
-): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) if (v !== undefined) e.setAttribute(k, v);
-  e.append(...children);
-  return e;
-}
-
-function button(label: string, onClick: () => void, title = label): HTMLButtonElement {
-  const b = h("button", { type: "button", title }, label);
-  b.addEventListener("click", onClick);
-  return b;
-}
 
 function sameTool(a: Tool, b: Tool): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-function download(name: string, text: string, type: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const a = h("a", { href: url, download: name });
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function slug(title: string): string {
-  const s = title
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
-  return s || "diagram";
-}
-
 export function mountApp(root: HTMLElement): void {
-  const store = new Store();
+  const route = parseRoute();
+  const store = new Store({ view: route.view });
+  root.classList.toggle("embed", route.embed);
 
   // ------------------------------------------------------------ toasts
 
-  const toasts = h("div", { class: "toasts" });
+  const toasts = h("div", { class: "toasts", role: "status" });
   const toast = (msg: string, error = false): void => {
     const t = h("div", { class: error ? "toast error" : "toast" }, msg);
     toasts.appendChild(t);
@@ -68,19 +43,85 @@ export function mountApp(root: HTMLElement): void {
 
   // ------------------------------------------------------------ io
 
-  const importText = (name: string, text: string): void => {
+  /** Loads a parsed document; returns false (after reporting) if it is invalid. */
+  const openText = (name: string, text: string, docId: string | null = null): boolean => {
     const result = parseDocument(text, detectFormat(name, text));
-    if (result.ok) {
-      store.load(result.doc, null);
-      canvas.fit();
-    } else {
+    if (!result.ok) {
       showIssues(result.issues);
+      return false;
     }
+    openDoc(result.doc, docId);
+    return true;
+  };
+
+  const openDoc = (doc: Doc, docId: string | null): void => {
+    store.load(doc, docId);
+    updateRoute({ docId, src: null });
+    requestAnimationFrame(() => canvas.fit());
+  };
+
+  const openExample = async (ex: Example): Promise<void> => {
+    openText(ex.name, await ex.load());
+  };
+
+  const loadFromServer = async (id: string): Promise<boolean> => {
+    const res = await fetch(`/api/diagrams/${encodeURIComponent(id)}`);
+    if (!res.ok) {
+      toast(`Could not load ${id}: ${res.status}`, true);
+      return false;
+    }
+    return openText(`${id}.json`, await res.text(), id);
+  };
+
+  const loadFromUrl = async (src: string): Promise<boolean> => {
+    let res: Response;
+    try {
+      res = await fetch(src);
+    } catch (e) {
+      toast(`Could not fetch ${src}: ${e}`, true);
+      return false;
+    }
+    if (!res.ok) {
+      toast(`Could not fetch ${src}: ${res.status}`, true);
+      return false;
+    }
+    const text = await res.text();
+    const result = parseDocument(text, detectFormat(new URL(src, location.href).pathname, text));
+    if (!result.ok) {
+      showIssues(result.issues);
+      return false;
+    }
+    // Keep `?src=` so the link stays shareable until the user saves elsewhere.
+    store.load(result.doc, null);
+    requestAnimationFrame(() => canvas.fit());
+    return true;
   };
 
   const exportAs = (format: Format): void => {
     const ext = format === "json" ? "json" : "toml";
     download(`${slug(store.doc.title)}.${ext}`, serialize(store.doc, format), `application/${ext}`);
+  };
+
+  const standaloneSvg = async (): Promise<string> => {
+    let css = "";
+    try {
+      css = await embeddedFontCss();
+    } catch (e) {
+      toast(`Font not embedded: ${e}`, true);
+    }
+    return canvas.exportSvg(css);
+  };
+
+  const exportSvg = async (): Promise<void> => {
+    download(`${slug(store.doc.title)}.svg`, await standaloneSvg(), "image/svg+xml");
+  };
+
+  const exportPng = async (): Promise<void> => {
+    try {
+      downloadBlob(`${slug(store.doc.title)}.png`, await svgToPng(await standaloneSvg(), 2));
+    } catch (e) {
+      toast(`PNG export failed: ${e}`, true);
+    }
   };
 
   const saveToServer = async (): Promise<void> => {
@@ -92,7 +133,7 @@ export function mountApp(root: HTMLElement): void {
     });
     if (res.ok) {
       store.set({ docId: id, dirty: false });
-      history.replaceState(null, "", `/d/${id}${location.search}`);
+      updateRoute({ docId: id, src: null });
       toast(`Saved as ${id}`);
     } else if (res.status === 422) {
       const body = (await res.json()) as { issues?: Issue[] };
@@ -102,27 +143,23 @@ export function mountApp(root: HTMLElement): void {
     }
   };
 
-  const loadFromServer = async (id: string): Promise<boolean> => {
-    const res = await fetch(`/api/diagrams/${id}`);
-    if (!res.ok) {
-      toast(`Could not load ${id}: ${res.status}`, true);
-      return false;
-    }
-    const result = parseDocument(await res.text(), "json");
-    if (!result.ok) {
-      showIssues(result.issues);
-      return false;
-    }
-    store.load(result.doc, id);
-    canvas.fit();
-    return true;
-  };
-
-  const fileInput = h("input", { type: "file", accept: ".json,.toml", hidden: "" });
+  const fileInput = h("input", {
+    type: "file",
+    accept: ".json,.toml,application/json,application/toml",
+    hidden: "",
+    "data-testid": "file-input",
+  });
   fileInput.addEventListener("change", async () => {
     const file = fileInput.files?.[0];
-    if (file) importText(file.name, await file.text());
+    if (file) openText(file.name, await file.text());
     fileInput.value = "";
+  });
+
+  const library = new Library({
+    openServer: (id) => void loadFromServer(id),
+    openExample: (ex) => void openExample(ex),
+    openFile: () => fileInput.click(),
+    toast,
   });
 
   // ------------------------------------------------------------ top bar
@@ -132,25 +169,49 @@ export function mountApp(root: HTMLElement): void {
   const undoBtn = button("↶", () => store.undo(), "Undo (Ctrl+Z)");
   const redoBtn = button("↷", () => store.redo(), "Redo (Ctrl+Y)");
 
+  const setView = (view: View): void => {
+    store.set({ view });
+    updateRoute({ view });
+  };
+  const viewButtons: [View, HTMLButtonElement][] = (["2d", "3d"] as const).map((v) => {
+    const b = button(v.toUpperCase(), () => setView(v), `${v.toUpperCase()} view (${v[0]})`);
+    b.dataset.view = v;
+    return [v, b];
+  });
+
   const topbar = h(
     "header",
     { class: "topbar" },
     title,
-    undoBtn,
-    redoBtn,
+    h("span", { class: "group" }, undoBtn, redoBtn),
+    h(
+      "span",
+      { class: "group segmented", role: "group", "aria-label": "View" },
+      ...viewButtons.map(([, b]) => b),
+    ),
     h("span", { class: "spacer" }),
-    button("New", () => {
-      store.load(emptyDoc(), null);
-      history.replaceState(null, "", "/");
-    }),
-    button("Open…", () => fileInput.click()),
-    button("Save", () => void saveToServer(), "Save to server (Ctrl+S)"),
-    button("JSON", () => exportAs("json"), "Export JSON"),
-    button("TOML", () => exportAs("toml"), "Export TOML"),
-    button(
-      "SVG",
-      () => download(`${slug(store.doc.title)}.svg`, canvas.exportSvg(""), "image/svg+xml"),
-      "Export SVG",
+    h(
+      "span",
+      { class: "group" },
+      button(
+        "New",
+        () => {
+          openDoc(emptyDoc(), null);
+        },
+        "New diagram",
+      ),
+      button("Open…", () => void library.show(), "Saved diagrams and examples (Ctrl+O)"),
+      button("Import…", () => fileInput.click(), "Import a .json / .toml file"),
+      button("Save", () => void saveToServer(), "Save to server (Ctrl+S)"),
+    ),
+    h(
+      "span",
+      { class: "group", role: "group", "aria-label": "Export" },
+      h("span", { class: "muted" }, "Export"),
+      button("JSON", () => exportAs("json"), "Export JSON"),
+      button("TOML", () => exportAs("toml"), "Export TOML"),
+      button("SVG", () => void exportSvg(), "Export SVG"),
+      button("PNG", () => void exportPng(), "Export PNG (2×)"),
     ),
     fileInput,
   );
@@ -158,21 +219,17 @@ export function mountApp(root: HTMLElement): void {
   // ------------------------------------------------------------ palette
 
   const toolButtons: [Tool, HTMLButtonElement][] = [];
-  const toolButton = (
-    tool: Tool,
-    label: string,
-    title: string,
-    color?: string,
-  ): HTMLButtonElement => {
-    const b = button(label, () => store.set({ tool, selection: null }), title);
-    if (color) b.style.borderLeftColor = color;
+  const toolButton = (tool: Tool, label: string, title: string, icon?: SVGSVGElement) => {
+    const content = icon ? h("span", { class: "tile" }, icon, h("span", {}, label)) : label;
+    const b = button(content, () => store.set({ tool, selection: null }), title);
+    b.dataset.tool = tool.type === "node" || tool.type === "zone" ? tool.kind : tool.type;
     toolButtons.push([tool, b]);
     return b;
   };
 
   const palette = h(
     "aside",
-    { class: "palette" },
+    { class: "palette", "data-testid": "palette" },
     h("h3", {}, "Tools"),
     h(
       "div",
@@ -191,8 +248,8 @@ export function mountApp(root: HTMLElement): void {
         toolButton(
           { type: "zone", kind },
           ZONE_KINDS[kind].label,
-          `Draw ${ZONE_KINDS[kind].label} (R)`,
-          ZONE_KINDS[kind].color,
+          `Draw ${ZONE_KINDS[kind].label}${kind === "generic" ? " (R)" : ""}`,
+          zoneIcon(kind),
         ),
       ),
     ),
@@ -205,106 +262,13 @@ export function mountApp(root: HTMLElement): void {
           { type: "node", kind },
           NODE_KINDS[kind].label,
           `Place ${NODE_KINDS[kind].label}`,
-          NODE_KINDS[kind].color,
+          nodeIcon(kind),
         ),
       ),
     ),
   );
 
   // ------------------------------------------------------------ properties
-
-  const props = h("aside", { class: "props" });
-  let propsFor: string | null = null;
-  let labelInput: HTMLInputElement | HTMLTextAreaElement | null = null;
-
-  const field = (name: string, input: HTMLElement): HTMLElement => h("label", {}, name, input);
-
-  const renderProps = (state: State): void => {
-    const found = state.selection ? findElement(state.doc, state.selection) : undefined;
-    const key = found ? found.el.id : null;
-    // Don't rebuild while the user is typing into the panel.
-    if (key === propsFor && props.contains(document.activeElement)) return;
-    propsFor = key;
-    labelInput = null;
-    props.replaceChildren();
-    if (!found) {
-      props.append(
-        h("h3", {}, "Diagram"),
-        h(
-          "p",
-          {},
-          `${state.doc.nodes.length} nodes · ${state.doc.zones.length} zones · ${state.doc.edges.length} edges`,
-        ),
-      );
-      return;
-    }
-    const id = found.el.id;
-    props.append(h("h3", {}, found.type));
-
-    const idInput = h("input", { value: id });
-    idInput.addEventListener("change", () => {
-      let ok = false;
-      store.edit((d) => (ok = renameId(d, id, idInput.value.trim())));
-      if (ok) store.set({ selection: idInput.value.trim() });
-      else {
-        toast("Id taken or invalid", true);
-        idInput.value = id;
-      }
-    });
-    props.append(field("id", idInput));
-
-    if (found.type === "note") {
-      const text = h("textarea", { rows: "4" });
-      text.value = found.el.text;
-      text.addEventListener("input", () =>
-        store.mutate((d) => {
-          const n = d.notes.find((x) => x.id === id);
-          if (n) n.text = text.value;
-        }),
-      );
-      text.addEventListener("focus", () => store.checkpoint());
-      labelInput = text;
-      props.append(field("text", text));
-    } else if (found.type !== "line") {
-      const label = h("input", { value: found.el.label ?? "" });
-      label.addEventListener("focus", () => store.checkpoint());
-      label.addEventListener("input", () =>
-        store.mutate((d) => {
-          const f = findElement(d, id);
-          if (f && f.type !== "line" && f.type !== "note") f.el.label = label.value;
-        }),
-      );
-      labelInput = label;
-      props.append(field("label", label));
-    }
-
-    const color = h("input", { type: "color", value: found.el.color ?? "#1e1e1e" });
-    color.addEventListener("change", () =>
-      store.edit((d) => {
-        const f = findElement(d, id);
-        if (f) f.el.color = color.value;
-      }),
-    );
-    props.append(field("color", color));
-
-    props.append(
-      h("p", {}),
-      button("Duplicate", () => duplicate()),
-      button("Delete", () => remove()),
-    );
-  };
-
-  window.addEventListener("infraplot:focus-label", () => {
-    renderProps(store.state);
-    labelInput?.focus();
-    labelInput?.select();
-  });
-
-  // ------------------------------------------------------------ stage
-
-  const stage = h("main", { class: "stage" });
-  root.append(topbar, palette, stage, props, toasts);
-  const canvas = new Canvas2D(stage, store);
 
   const remove = (): void => {
     const id = store.state.selection;
@@ -321,21 +285,44 @@ export function mountApp(root: HTMLElement): void {
     if (copy) store.set({ selection: copy });
   };
 
+  const props = new PropsPanel(store, { toast, duplicate, remove });
+  window.addEventListener("infraplot:focus-label", () => props.focusLabel());
+
+  // ------------------------------------------------------------ stage
+
+  const stage = h("main", { class: "stage" });
+  const view3d = h(
+    "div",
+    { class: "view3d", "data-testid": "view-3d", hidden: "" },
+    h("p", {}, "The isometric 3D view is not implemented yet."),
+    button("Back to 2D", () => setView("2d"), "2D view (2)"),
+  );
+  root.append(topbar, palette, stage, props.el, toasts, library.el);
+  const canvas = new Canvas2D(stage, store);
+  stage.append(view3d);
+
   store.subscribe((state, prev) => {
     canvas.render();
     if (document.activeElement !== title) title.value = state.doc.title;
     undoBtn.disabled = !store.canUndo;
     redoBtn.disabled = !store.canRedo;
     for (const [tool, b] of toolButtons) b.classList.toggle("active", sameTool(tool, state.tool));
-    renderProps(state);
-    if (state.doc !== prev.doc) localStorage.setItem(AUTOSAVE_KEY, serialize(state.doc, "json"));
+    for (const [view, b] of viewButtons) b.classList.toggle("active", view === state.view);
+    canvas.svg.toggleAttribute("hidden", state.view !== "2d");
+    view3d.toggleAttribute("hidden", state.view !== "3d");
+    root.dataset.view = state.view;
+    if (state.view === "2d" && prev.view !== "2d") requestAnimationFrame(() => canvas.fit());
+    props.render(state);
+    if (state.doc !== prev.doc && !route.embed) {
+      localStorage.setItem(AUTOSAVE_KEY, serialize(state.doc, "json"));
+    }
     document.title = `${state.dirty ? "• " : ""}${state.doc.title} — infra-plot`;
   });
 
   // ------------------------------------------------------------ shortcuts
 
   window.addEventListener("keydown", (e) => {
-    if (isTyping(e)) return;
+    if (isTyping(e) || library.el.open) return;
     const mod = e.ctrlKey || e.metaKey;
     const key = e.key.toLowerCase();
     if (mod) {
@@ -343,10 +330,12 @@ export function mountApp(root: HTMLElement): void {
       else if (key === "y" || (key === "z" && e.shiftKey)) store.redo();
       else if (key === "d") duplicate();
       else if (key === "s") void saveToServer();
+      else if (key === "o") void library.show();
       else return;
       e.preventDefault();
       return;
     }
+    if (e.altKey) return;
     const tools: Record<string, Tool> = {
       v: { type: "select" },
       h: { type: "hand" },
@@ -357,6 +346,8 @@ export function mountApp(root: HTMLElement): void {
     };
     const tool = tools[key];
     if (tool) store.set({ tool });
+    else if (key === "2") setView("2d");
+    else if (key === "3") setView("3d");
     else if (key === "delete" || key === "backspace") remove();
     else if (key === "escape") {
       if (!canvas.cancelDrafts()) store.set({ selection: null, tool: { type: "select" } });
@@ -367,24 +358,38 @@ export function mountApp(root: HTMLElement): void {
 
   // ------------------------------------------------------------ drag & drop
 
-  window.addEventListener("dragover", (e) => e.preventDefault());
+  window.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    root.classList.add("dropping");
+  });
+  window.addEventListener("dragleave", (e) => {
+    if (!e.relatedTarget) root.classList.remove("dropping");
+  });
   window.addEventListener("drop", async (e) => {
     e.preventDefault();
+    root.classList.remove("dropping");
     const file = e.dataTransfer?.files[0];
-    if (file) importText(file.name, await file.text());
+    if (file) openText(file.name, await file.text());
   });
 
   // ------------------------------------------------------------ boot
 
-  void document.fonts.ready.then(() => canvas.invalidate());
-  const route = /^\/d\/([^/]+)$/.exec(location.pathname);
-  const saved = localStorage.getItem(AUTOSAVE_KEY);
-  if (route?.[1]) {
-    void loadFromServer(route[1]);
-  } else if (saved) {
-    const result = parseDocument(saved, "json");
-    if (result.ok) store.load(result.doc, null);
-  }
-  store.set({});
-  requestAnimationFrame(() => canvas.fit());
+  const boot = async (): Promise<void> => {
+    if (route.src) {
+      await loadFromUrl(route.src);
+    } else if (route.docId) {
+      await loadFromServer(route.docId);
+    } else {
+      const saved = route.embed ? null : localStorage.getItem(AUTOSAVE_KEY);
+      const result = saved ? parseDocument(saved, "json") : null;
+      if (result?.ok) store.load(result.doc, null);
+    }
+    store.set({});
+    await document.fonts.ready;
+    canvas.invalidate();
+    canvas.fit();
+    // Lets screenshot tooling wait for a fully drawn diagram.
+    root.dataset.ready = "true";
+  };
+  void boot();
 }
