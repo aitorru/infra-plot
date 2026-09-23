@@ -1,0 +1,169 @@
+version = 1
+title = "Three-tier web app"
+description = "Classic web / app / data tiers behind a CDN and a load balancer."
+
+[[zones]]
+id = "region"
+kind = "region"
+label = "eu-west-1"
+x = 200
+y = 0
+w = 900
+h = 560
+
+[[zones]]
+id = "vpc"
+kind = "vpc"
+label = "prod VPC 10.0.0.0/16"
+x = 220
+y = 60
+w = 860
+h = 480
+
+[[zones]]
+id = "public"
+kind = "subnet"
+label = "public"
+x = 240
+y = 120
+w = 200
+h = 400
+
+[[zones]]
+id = "private"
+kind = "subnet"
+label = "app"
+x = 460
+y = 120
+w = 280
+h = 400
+
+[[zones]]
+id = "data"
+kind = "subnet"
+label = "data"
+x = 760
+y = 120
+w = 300
+h = 400
+
+[[nodes]]
+id = "user"
+kind = "user"
+label = "Users"
+x = 20
+y = 180
+
+[[nodes]]
+id = "cdn"
+kind = "cdn"
+label = "CDN"
+x = 120
+y = 320
+
+[[nodes]]
+id = "lb"
+kind = "load-balancer"
+label = "ALB"
+x = 340
+y = 320
+
+[[nodes]]
+id = "app1"
+kind = "server"
+label = "app-1"
+x = 540
+y = 240
+
+[nodes.meta]
+ip = "10.0.2.11"
+port = "8080"
+
+[[nodes]]
+id = "app2"
+kind = "server"
+label = "app-2"
+x = 660
+y = 400
+
+[nodes.meta]
+ip = "10.0.2.12"
+port = "8080"
+
+[[nodes]]
+id = "db"
+kind = "database"
+label = "Postgres primary"
+x = 840
+y = 280
+
+[nodes.meta]
+engine = "postgres 17"
+
+[[nodes]]
+id = "replica"
+kind = "database"
+label = "replica"
+x = 840
+y = 420
+
+[[nodes]]
+id = "cache"
+kind = "cache"
+label = "Redis"
+x = 990
+y = 180
+
+[[edges]]
+id = "user-cdn"
+from = "user"
+to = "cdn"
+label = "HTTPS"
+
+[[edges]]
+id = "cdn-lb"
+from = "cdn"
+to = "lb"
+
+[[edges]]
+id = "lb-app1"
+from = "lb"
+to = "app1"
+route = "orthogonal"
+
+[[edges]]
+id = "lb-app2"
+from = "lb"
+to = "app2"
+route = "orthogonal"
+
+[[edges]]
+id = "app1-db"
+from = "app1"
+to = "db"
+label = "SQL"
+
+[[edges]]
+id = "app2-db"
+from = "app2"
+to = "db"
+
+[[edges]]
+id = "app1-cache"
+from = "app1"
+to = "cache"
+style = "dashed"
+
+[[edges]]
+id = "replication"
+from = "db"
+to = "replica"
+label = "streaming"
+style = "dotted"
+
+[[notes]]
+id = "note-ha"
+x = 480
+y = 580
+text = "Two app servers across AZs"
+size = "s"

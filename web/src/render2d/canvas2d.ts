@@ -351,7 +351,8 @@ export class Canvas2D {
   #drawEdge(e: Edge, pts: Point[]): SVGGElement {
     const g = this.#group("edge", e.id);
     g.appendChild(this.#hitPath(pts));
-    g.appendChild(this.#strokes(e.id, pts, e.style, e.arrow, e.color ?? INK));
+    // Matches the Rust model: edges point at `to` unless told otherwise.
+    g.appendChild(this.#strokes(e.id, pts, e.style, e.arrow ?? "end", e.color ?? INK));
     if (e.label) {
       const [mx, my] = pointAlong(pts, 0.5);
       const w = e.label.length * 16 * 0.55 + 12;
