@@ -18,7 +18,7 @@ import {
   zoneBox,
   zoneDepth,
 } from "../model/geometry";
-import { addEdge, addNode, moveElement } from "../state/ops";
+import { addEdge, addNode, moveElement, zoneContents } from "../state/ops";
 import type { Store } from "../state/store";
 import { flatLabel, labelSprite } from "./labels";
 import { creases, darker, dashPattern, ink, nodeModel, rng, toon } from "./models";
@@ -43,7 +43,14 @@ interface Packets {
 }
 
 type Drag =
-  | { kind: "move"; id: string; plane: THREE.Plane; last: Point; moved: boolean }
+  | {
+      kind: "move";
+      id: string;
+      plane: THREE.Plane;
+      last: Point;
+      moved: boolean;
+      contents: ReadonlySet<string>;
+    }
   | { kind: "connect"; from: string; start: THREE.Vector3 }
   | { kind: "click"; x: number; y: number };
 
@@ -898,7 +905,14 @@ export class Scene3D {
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -base);
     const p = this.#onPlane(e, plane);
     if (!p) return;
-    this.#drag = { kind: "move", id: hit.id, plane, last: [snap(p.x), snap(p.z)], moved: false };
+    this.#drag = {
+      kind: "move",
+      id: hit.id,
+      plane,
+      last: [snap(p.x), snap(p.z)],
+      moved: false,
+      contents: zoneContents(doc, hit.id),
+    };
   }
 
   #onMove(e: PointerEvent): void {
@@ -913,7 +927,9 @@ export class Scene3D {
       if (!d.moved) this.#store.checkpoint();
       d.moved = true;
       d.last = at;
-      this.#store.mutate((doc) => moveElement(doc, d.id, dx, dy, !e.shiftKey));
+      this.#store.mutate((doc) =>
+        moveElement(doc, d.id, dx, dy, e.shiftKey ? new Set() : d.contents),
+      );
     } else if (d?.kind === "connect") {
       const p =
         this.#hit(e)?.point ?? this.#onPlane(e, new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
