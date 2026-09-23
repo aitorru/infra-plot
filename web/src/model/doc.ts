@@ -3,7 +3,19 @@ import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 import schema from "../../../schema/diagram.schema.json";
 import type { Diagram, Edge, Line, Node, Note, Zone } from "./generated";
 
-export type { Arrow, Edge, Line, Node, NodeKind, Note, Route, StrokeStyle, TextSize, Zone, ZoneKind } from "./generated";
+export type {
+  Arrow,
+  Edge,
+  Line,
+  Node,
+  NodeKind,
+  Note,
+  Route,
+  StrokeStyle,
+  TextSize,
+  Zone,
+  ZoneKind,
+} from "./generated";
 
 export const FORMAT_VERSION = 1;
 
@@ -99,7 +111,7 @@ export function serialize(doc: Doc, format: Format): string {
   const d = toDiagram(doc);
   return format === "json"
     ? `${JSON.stringify(d, null, 2)}\n`
-    : stringifyToml(d as Record<string, unknown>);
+    : stringifyToml(d as unknown as Record<string, unknown>);
 }
 
 const ajv = new Ajv2020({ allErrors: true, strict: false, validateFormats: false });
@@ -116,7 +128,10 @@ export function parseDocument(text: string, format: Format): ParseResult {
   try {
     raw = format === "json" ? JSON.parse(text) : parseToml(text);
   } catch (e) {
-    return { ok: false, issues: [{ path: "", message: `invalid ${format.toUpperCase()}: ${String(e)}` }] };
+    return {
+      ok: false,
+      issues: [{ path: "", message: `invalid ${format.toUpperCase()}: ${String(e)}` }],
+    };
   }
   if (!validateSchema(raw)) {
     const issues = (validateSchema.errors ?? []).map((err) => ({

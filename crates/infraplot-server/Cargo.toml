@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "infraplot-server"
 description = "infra-plot HTTP server: diagram storage API + static frontend"
 version.workspace = true

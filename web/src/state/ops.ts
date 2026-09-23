@@ -2,7 +2,7 @@
 import { NODE_KINDS, ZONE_KINDS } from "../model/catalog";
 import type { Doc, Edge, Node, NodeKind, Zone, ZoneKind } from "../model/doc";
 import { findElement, uniqueId } from "../model/doc";
-import { contains, noteBox, nodeBox, snap, zoneBox, type Point } from "../model/geometry";
+import { contains, nodeBox, noteBox, type Point, snap, zoneBox } from "../model/geometry";
 
 export function addNode(doc: Doc, kind: NodeKind, [x, y]: Point): Node {
   const node: Node = {
@@ -16,7 +16,14 @@ export function addNode(doc: Doc, kind: NodeKind, [x, y]: Point): Node {
   return node;
 }
 
-export function addZone(doc: Doc, kind: ZoneKind, x: number, y: number, w: number, h: number): Zone {
+export function addZone(
+  doc: Doc,
+  kind: ZoneKind,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): Zone {
   const zone: Zone = {
     id: uniqueId(doc, kind === "generic" ? "zone" : kind),
     kind,
@@ -37,7 +44,14 @@ export function addEdge(doc: Doc, from: string, to: string): Edge | undefined {
   if (from === to) return undefined;
   const existing = doc.edges.find((e) => e.from === from && e.to === to);
   if (existing) return existing;
-  const edge: Edge = { id: uniqueId(doc, "edge"), from, to, style: "solid", arrow: "end", route: "straight" };
+  const edge: Edge = {
+    id: uniqueId(doc, "edge"),
+    from,
+    to,
+    style: "solid",
+    arrow: "end",
+    route: "straight",
+  };
   doc.edges.push(edge);
   return edge;
 }
@@ -46,7 +60,13 @@ export function addEdge(doc: Doc, from: string, to: string): Edge | undefined {
  * Moves an element by (dx, dy). Moving a zone drags along everything fully
  * inside it, so a VPC can be repositioned with its contents.
  */
-export function moveElement(doc: Doc, id: string, dx: number, dy: number, withContents = true): void {
+export function moveElement(
+  doc: Doc,
+  id: string,
+  dx: number,
+  dy: number,
+  withContents = true,
+): void {
   const found = findElement(doc, id);
   if (!found) return;
   switch (found.type) {

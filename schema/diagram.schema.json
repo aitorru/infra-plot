@@ -1,0 +1,359 @@
+{
+  "$defs": {
+    "Arrow": {
+      "enum": [
+        "none",
+        "end",
+        "start",
+        "both"
+      ],
+      "type": "string"
+    },
+    "Edge": {
+      "additionalProperties": false,
+      "properties": {
+        "arrow": {
+          "$ref": "#/$defs/Arrow",
+          "default": "end"
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "from": {
+          "description": "Id of a node or zone.",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "route": {
+          "$ref": "#/$defs/Route",
+          "default": "straight"
+        },
+        "style": {
+          "$ref": "#/$defs/StrokeStyle",
+          "default": "solid"
+        },
+        "to": {
+          "description": "Id of a node or zone.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
+    "Line": {
+      "additionalProperties": false,
+      "properties": {
+        "arrow": {
+          "$ref": "#/$defs/Arrow",
+          "default": "none"
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "points": {
+          "description": "At least two `[x, y]` points.",
+          "items": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "style": {
+          "$ref": "#/$defs/StrokeStyle",
+          "default": "solid"
+        }
+      },
+      "required": [
+        "id",
+        "points"
+      ],
+      "type": "object"
+    },
+    "Node": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "description": "Hex colour (`#rgb` or `#rrggbb`). Defaults to the colour of `kind`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/NodeKind"
+        },
+        "label": {
+          "default": "",
+          "type": "string"
+        },
+        "meta": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Arbitrary key/value details (IPs, ports, versions...).",
+          "type": "object"
+        },
+        "x": {
+          "description": "Centre x.",
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "description": "Centre y.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "NodeKind": {
+      "enum": [
+        "service",
+        "server",
+        "vm",
+        "container",
+        "pod",
+        "k8s",
+        "proxy",
+        "load-balancer",
+        "api-gateway",
+        "database",
+        "cache",
+        "queue",
+        "storage",
+        "function",
+        "firewall",
+        "cdn",
+        "dns",
+        "user",
+        "internet",
+        "monitoring"
+      ],
+      "type": "string"
+    },
+    "Note": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "size": {
+          "$ref": "#/$defs/TextSize",
+          "default": "m"
+        },
+        "text": {
+          "type": "string"
+        },
+        "x": {
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "x",
+        "y",
+        "text"
+      ],
+      "type": "object"
+    },
+    "Route": {
+      "enum": [
+        "straight",
+        "orthogonal"
+      ],
+      "type": "string"
+    },
+    "StrokeStyle": {
+      "enum": [
+        "solid",
+        "dashed",
+        "dotted"
+      ],
+      "type": "string"
+    },
+    "TextSize": {
+      "enum": [
+        "s",
+        "m",
+        "l",
+        "xl"
+      ],
+      "type": "string"
+    },
+    "Zone": {
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "description": "Hex colour (`#rgb` or `#rrggbb`). Defaults to the colour of `kind`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "h": {
+          "format": "double",
+          "type": "number"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ZoneKind",
+          "default": "generic"
+        },
+        "label": {
+          "default": "",
+          "type": "string"
+        },
+        "style": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StrokeStyle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Border style. Defaults to the style of `kind`."
+        },
+        "w": {
+          "format": "double",
+          "type": "number"
+        },
+        "x": {
+          "description": "Left edge.",
+          "format": "double",
+          "type": "number"
+        },
+        "y": {
+          "description": "Top edge.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "type": "object"
+    },
+    "ZoneKind": {
+      "enum": [
+        "generic",
+        "region",
+        "vpc",
+        "subnet",
+        "dmz",
+        "k8s-cluster",
+        "namespace",
+        "on-prem"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "https://infra-plot.dev/schema/diagram.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "An infrastructure diagram.",
+  "properties": {
+    "description": {
+      "type": "string"
+    },
+    "edges": {
+      "description": "Connections between nodes and/or zones.",
+      "items": {
+        "$ref": "#/$defs/Edge"
+      },
+      "type": "array"
+    },
+    "lines": {
+      "description": "Free-form polylines.",
+      "items": {
+        "$ref": "#/$defs/Line"
+      },
+      "type": "array"
+    },
+    "nodes": {
+      "description": "Infrastructure components.",
+      "items": {
+        "$ref": "#/$defs/Node"
+      },
+      "type": "array"
+    },
+    "notes": {
+      "description": "Free-floating text.",
+      "items": {
+        "$ref": "#/$defs/Note"
+      },
+      "type": "array"
+    },
+    "title": {
+      "type": "string"
+    },
+    "version": {
+      "description": "Format version. Must be `1`.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "zones": {
+      "description": "Rectangular areas that group nodes (networks, VPCs, clusters...).",
+      "items": {
+        "$ref": "#/$defs/Zone"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "title"
+  ],
+  "title": "Diagram",
+  "type": "object"
+}

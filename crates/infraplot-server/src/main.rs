@@ -22,7 +22,7 @@ use tracing_subscriber::EnvFilter;
 #[command(version, about)]
 struct Args {
     /// Address to listen on.
-    #[arg(long, env = "INFRAPLOT_BIND", default_value = "127.0.0.1:8080")]
+    #[arg(long, env = "INFRAPLOT_BIND", default_value = "127.0.0.1:31080")]
     bind: SocketAddr,
     /// Directory where diagrams are stored.
     #[arg(long, env = "INFRAPLOT_DATA_DIR", default_value = "./data")]
@@ -52,7 +52,9 @@ async fn main() -> anyhow::Result<()> {
             let spa = ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html")));
             app = app.fallback_service(spa);
         }
-        Some(dir) => tracing::warn!(dir = %dir.display(), "static dir has no index.html, serving API only"),
+        Some(dir) => {
+            tracing::warn!(dir = %dir.display(), "static dir has no index.html, serving API only");
+        }
         None => tracing::info!("no static dir configured, serving API only"),
     }
     let app = app
@@ -75,7 +77,8 @@ async fn shutdown_signal() {
     };
     #[cfg(unix)]
     let term = async {
-        if let Ok(mut s) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+        if let Ok(mut s) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
             s.recv().await;
         }
     };

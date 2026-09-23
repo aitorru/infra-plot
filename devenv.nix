@@ -2,7 +2,8 @@
 
 let
   # Playwright browsers come from nixpkgs; the npm package must match this version
-  # (checked by `check-playwright-version`).
+  # (checked by `check-playwright-version`). Only the `e2e` profile pulls the
+  # browsers in: they weigh ~1 GB and E2E runs in CI, not on the dev box.
   playwright = pkgs.playwright-driver;
 in
 {
@@ -14,16 +15,20 @@ in
     pkgs.cargo-deny
     pkgs.cargo-watch
     pkgs.taplo
+    pkgs.biome
   ];
 
   languages.rust = {
     enable = true;
     channel = "stable";
-    components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" "rust-src" ];
+    # rust-analyzer / rust-src live in the `ide` profile.
+    components = [ "rustc" "cargo" "clippy" "rustfmt" ];
+    lsp.enable = lib.mkDefault false;
   };
 
   languages.javascript = {
     enable = true;
+    lsp.enable = lib.mkDefault false;
     package = pkgs.nodejs_24;
     pnpm = {
       enable = true;
@@ -32,13 +37,22 @@ in
   };
 
   env = {
-    PLAYWRIGHT_BROWSERS_PATH = "${playwright.browsers}";
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
-    PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
+    # Evaluating the version doesn't build or fetch the browsers.
     PLAYWRIGHT_NIX_VERSION = playwright.version;
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
+    # The npm biome binary is dynamically linked and won't run on NixOS; the npm
+    # package (pinned to the same version) only provides the JS API / schema.
+    BIOME_BINARY = "${pkgs.biome}/bin/biome";
     INFRAPLOT_DATA_DIR = "${config.devenv.state}/data";
     INFRAPLOT_STATIC_DIR = "${config.devenv.root}/web/dist";
     RUST_LOG = "infraplot=debug,tower_http=info";
+    # Keep caches next to the repo (SSD) instead of $HOME (SD card).
+    CARGO_HOME = "${config.devenv.state}/cargo";
+    npm_config_store_dir = "${config.devenv.state}/pnpm-store";
+    # Dev ports (> 30000). Vite proxies /api to the Rust server.
+    INFRAPLOT_WEB_PORT = "31173";
+    INFRAPLOT_API_PORT = "31080";
+    INFRAPLOT_BIND = "127.0.0.1:31080";
   };
 
   scripts = {
@@ -72,8 +86,22 @@ in
       pnpm --filter web run build
       cargo build --release --locked -p infraplot-server
     '';
+    dev.exec = ''
+      set -euo pipefail
+      cd "$DEVENV_ROOT"
+      [ -d node_modules ] || pnpm install --frozen-lockfile
+      [ -f schema/diagram.schema.json ] || gen-schema
+      cargo watch -q -w crates -x 'run -p infraplot-server' &
+      server=$!
+      trap 'kill $server 2>/dev/null' EXIT INT TERM
+      pnpm --filter web exec vite --host 0.0.0.0 --port "$INFRAPLOT_WEB_PORT" --strictPort
+    '';
     e2e.exec = ''
       set -euo pipefail
+      if [ -z "''${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+        echo "e2e needs the browsers: devenv --profile e2e shell -- e2e (normally CI runs it)" >&2
+        exit 1
+      fi
       cd "$DEVENV_ROOT"
       build
       pnpm --filter e2e exec playwright test "$@"
@@ -81,8 +109,8 @@ in
   };
 
   processes = {
-    server.exec = "cargo watch -w crates -x 'run -p infraplot-server -- --bind 127.0.0.1:8080'";
-    web.exec = "pnpm --filter web run dev";
+    server.exec = "cargo watch -w crates -x 'run -p infraplot-server'";
+    web.exec = "pnpm --filter web exec vite --host 0.0.0.0";
   };
 
   git-hooks.hooks = {
@@ -90,18 +118,35 @@ in
     taplo.enable = true;
     biome = {
       enable = true;
-      entry = lib.mkForce "pnpm exec biome check --write --no-errors-on-unmatched";
+      entry = lib.mkForce "${pkgs.biome}/bin/biome check --write --no-errors-on-unmatched";
+    };
+  };
+
+  profiles = {
+    # Headless Chromium for Playwright. Used by CI; locally: devenv --profile e2e shell
+    e2e.module = {
+      env = {
+        PLAYWRIGHT_BROWSERS_PATH = "${playwright.browsers}";
+        PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
+        # Without it headless Chromium aborts as soon as a page uses web fonts.
+        FONTCONFIG_FILE = "${pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; }}";
+      };
+    };
+    # Editor tooling: devenv --profile ide shell
+    ide.module = {
+      languages.rust.components = [ "rust-analyzer" "rust-src" ];
+      languages.rust.lsp.enable = true;
+      languages.javascript.lsp.enable = true;
     };
   };
 
   enterShell = ''
-    echo "infra-plot dev shell · rust $(rustc --version | cut -d' ' -f2) · node $(node --version) · playwright ${playwright.version}"
-    echo "  devenv up        → server (:8080) + vite (:5173)"
-    echo "  lint | build | e2e | gen-schema"
+    echo "infra-plot dev shell · rust $(rustc --version | cut -d' ' -f2) · node $(node --version)"
+    echo "  dev (o devenv up) → vite :$INFRAPLOT_WEB_PORT (abre esto) + api :$INFRAPLOT_API_PORT"
+    echo "  lint | build | gen-schema · e2e corre en CI (o: devenv --profile e2e shell -- e2e)"
   '';
 
   enterTest = ''
     lint
-    e2e
   '';
 }

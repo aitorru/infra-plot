@@ -116,8 +116,11 @@ export class Store {
   }
 
   #restore(doc: Doc): void {
-    const ids = new Set([doc.zones, doc.nodes, doc.edges, doc.lines, doc.notes].flat().map((e) => e.id));
-    const selection = this.#state.selection && ids.has(this.#state.selection) ? this.#state.selection : null;
+    const ids = new Set(
+      [doc.zones, doc.nodes, doc.edges, doc.lines, doc.notes].flat().map((e) => e.id),
+    );
+    const selection =
+      this.#state.selection && ids.has(this.#state.selection) ? this.#state.selection : null;
     this.set({ doc, selection, dirty: true });
   }
 

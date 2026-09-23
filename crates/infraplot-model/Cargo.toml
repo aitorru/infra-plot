@@ -1,4 +1,5 @@
 [package]
+publish = false
 name = "infraplot-model"
 description = "infra-plot diagram document model: types, JSON Schema and validation"
 version.workspace = true

@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+    ignore:
+      # Must match nixpkgs' playwright-driver; bump it together with devenv.lock.
+      - dependency-name: "@playwright/test"
+      # Must match nixpkgs' biome (BIOME_BINARY); bump it together with devenv.lock.
+      - dependency-name: "@biomejs/biome"

@@ -7,7 +7,7 @@
 //! Coordinates live on a flat "floor" plane measured in world units (1 unit = 1 px
 //! in the 2D view at 100% zoom). `x` grows to the right and `y` grows downwards.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -236,6 +236,9 @@ impl Diagram {
         Ok(toml::from_str(src)?)
     }
 
+    /// # Panics
+    ///
+    /// Never: every field serialises to JSON.
     #[must_use]
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).expect("diagram is always JSON-serialisable")
@@ -252,11 +255,14 @@ impl Diagram {
         if self.version != FORMAT_VERSION {
             v.push(
                 "version",
-                format!("unsupported version {}, expected {FORMAT_VERSION}", self.version),
+                format!(
+                    "unsupported version {}, expected {FORMAT_VERSION}",
+                    self.version
+                ),
             );
         }
 
-        let mut targets: HashMap<&str, ()> = HashMap::new();
+        let mut targets: HashSet<&str> = HashSet::new();
         for (i, z) in self.zones.iter().enumerate() {
             let p = format!("zones[{i}]");
             v.id(&p, &z.id);
@@ -265,22 +271,25 @@ impl Diagram {
                 v.push(&p, "zone width and height must be positive");
             }
             v.color(&p, z.color.as_deref());
-            targets.insert(&z.id, ());
+            targets.insert(&z.id);
         }
         for (i, n) in self.nodes.iter().enumerate() {
             let p = format!("nodes[{i}]");
             v.id(&p, &n.id);
             v.finite(&p, &[n.x, n.y]);
             v.color(&p, n.color.as_deref());
-            targets.insert(&n.id, ());
+            targets.insert(&n.id);
         }
         for (i, e) in self.edges.iter().enumerate() {
             let p = format!("edges[{i}]");
             v.id(&p, &e.id);
             v.color(&p, e.color.as_deref());
             for (field, target) in [("from", &e.from), ("to", &e.to)] {
-                if !targets.contains_key(target.as_str()) {
-                    v.push(format!("{p}.{field}"), format!("unknown node or zone `{target}`"));
+                if !targets.contains(target.as_str()) {
+                    v.push(
+                        format!("{p}.{field}"),
+                        format!("unknown node or zone `{target}`"),
+                    );
                 }
             }
             if e.from == e.to {
@@ -322,9 +331,15 @@ impl Validator {
 
     fn id(&mut self, path: &str, id: &str) {
         if id.is_empty() || id.chars().any(char::is_whitespace) {
-            self.push(format!("{path}.id"), "ids must be non-empty and contain no whitespace");
+            self.push(
+                format!("{path}.id"),
+                "ids must be non-empty and contain no whitespace",
+            );
         } else if let Some(prev) = self.seen.insert(id.to_owned(), path.to_owned()) {
-            self.push(format!("{path}.id"), format!("duplicate id `{id}` (also used by {prev})"));
+            self.push(
+                format!("{path}.id"),
+                format!("duplicate id `{id}` (also used by {prev})"),
+            );
         }
     }
 
@@ -340,7 +355,10 @@ impl Validator {
             matches!(hex.len(), 3 | 6) && hex.chars().all(|ch| ch.is_ascii_hexdigit())
         });
         if !ok {
-            self.push(format!("{path}.color"), format!("`{c}` is not a #rgb or #rrggbb colour"));
+            self.push(
+                format!("{path}.color"),
+                format!("`{c}` is not a #rgb or #rrggbb colour"),
+            );
         }
     }
 }

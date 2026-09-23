@@ -80,8 +80,8 @@ impl Store {
             Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(e),
         };
-        let diagram = Diagram::from_json(&raw)
-            .map_err(|e| std::io::Error::new(ErrorKind::InvalidData, e))?;
+        let diagram =
+            Diagram::from_json(&raw).map_err(|e| std::io::Error::new(ErrorKind::InvalidData, e))?;
         let modified = tokio::fs::metadata(&path).await?.modified()?;
         let updated_at = modified
             .duration_since(UNIX_EPOCH)

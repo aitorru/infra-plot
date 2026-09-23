@@ -4,7 +4,6 @@ import type { Options } from "roughjs/bin/core";
 import type { RoughSVG } from "roughjs/bin/svg";
 import { ACCENT, GRID, INK, NODE_KINDS, NODE_SIZE, TEXT_SIZES, ZONE_KINDS } from "../model/catalog";
 import type { Arrow, Doc, Edge, Line, Node, Note, StrokeStyle, Zone } from "../model/doc";
-import { addEdge, addNode, addZone, moveElement } from "../state/ops";
 import { findElement, uniqueId } from "../model/doc";
 import {
   type Box,
@@ -18,6 +17,7 @@ import {
   snap,
   zoneBox,
 } from "../model/geometry";
+import { addEdge, addNode, addZone, moveElement } from "../state/ops";
 import type { Store } from "../state/store";
 import { arrowHead, drawGlyph, svgText } from "./glyphs";
 
@@ -82,11 +82,18 @@ export class Canvas2D {
     this.#rc = rough.svg(this.svg);
 
     const defs = el("defs");
-    this.#gridPattern = el("pattern", { id: "grid", width: GRID, height: GRID, patternUnits: "userSpaceOnUse" });
+    this.#gridPattern = el("pattern", {
+      id: "grid",
+      width: GRID,
+      height: GRID,
+      patternUnits: "userSpaceOnUse",
+    });
     this.#gridPattern.appendChild(el("circle", { cx: 1, cy: 1, r: 1, fill: "#d0d0d8" }));
     defs.appendChild(this.#gridPattern);
     this.svg.appendChild(defs);
-    this.svg.appendChild(el("rect", { class: "grid-bg", width: "100%", height: "100%", fill: "url(#grid)" }));
+    this.svg.appendChild(
+      el("rect", { class: "grid-bg", width: "100%", height: "100%", fill: "url(#grid)" }),
+    );
 
     this.#viewport = el("g", { class: "viewport" });
     this.svg.appendChild(this.#viewport);
@@ -144,12 +151,18 @@ export class Canvas2D {
 
   toWorld(clientX: number, clientY: number): Point {
     const r = this.svg.getBoundingClientRect();
-    return [(clientX - r.left - this.#camera.x) / this.#camera.zoom, (clientY - r.top - this.#camera.y) / this.#camera.zoom];
+    return [
+      (clientX - r.left - this.#camera.x) / this.#camera.zoom,
+      (clientY - r.top - this.#camera.y) / this.#camera.zoom,
+    ];
   }
 
   toScreen([x, y]: Point): Point {
     const r = this.svg.getBoundingClientRect();
-    return [x * this.#camera.zoom + this.#camera.x + r.left, y * this.#camera.zoom + this.#camera.y + r.top];
+    return [
+      x * this.#camera.zoom + this.#camera.x + r.left,
+      y * this.#camera.zoom + this.#camera.y + r.top,
+    ];
   }
 
   zoomAt(factor: number, clientX?: number, clientY?: number): void {
@@ -169,7 +182,10 @@ export class Canvas2D {
       this.#camera = { x: r.width / 2, y: r.height / 2, zoom: 1 };
     } else {
       const pad = 80;
-      const zoom = Math.min(2, Math.max(0.1, Math.min((r.width - pad * 2) / b.w, (r.height - pad * 2) / b.h)));
+      const zoom = Math.min(
+        2,
+        Math.max(0.1, Math.min((r.width - pad * 2) / b.w, (r.height - pad * 2) / b.h)),
+      );
       this.#camera = {
         zoom,
         x: r.width / 2 - (b.x + b.w / 2) * zoom,
@@ -239,18 +255,30 @@ export class Canvas2D {
     const info = ZONE_KINDS[z.kind ?? "generic"];
     const color = z.color ?? info.color;
     const g = this.#group("zone", z.id);
-    g.appendChild(el("rect", { x: z.x, y: z.y, width: z.w, height: z.h, fill: "transparent", class: "hit" }));
+    g.appendChild(
+      el("rect", { x: z.x, y: z.y, width: z.w, height: z.h, fill: "transparent", class: "hit" }),
+    );
     g.appendChild(
       this.#rc.rectangle(
         z.x,
         z.y,
         z.w,
         z.h,
-        withDash(this.#base(z.id, color, { fillStyle: "solid", strokeWidth: 2, roughness: 0.8, stroke: "#495057" }), z.style ?? info.style),
+        withDash(
+          this.#base(z.id, color, {
+            fillStyle: "solid",
+            strokeWidth: 2,
+            roughness: 0.8,
+            stroke: "#495057",
+          }),
+          z.style ?? info.style,
+        ),
       ),
     );
     const tag = info.label.toUpperCase();
-    g.appendChild(svgText(z.x + 14, z.y + 16, tag, 11, { anchor: "start", color: "#868e96", weight: 700 }));
+    g.appendChild(
+      svgText(z.x + 14, z.y + 16, tag, 11, { anchor: "start", color: "#868e96", weight: 700 }),
+    );
     g.appendChild(svgText(z.x + 14, z.y + 36, z.label ?? "", 20, { anchor: "start" }));
     return g;
   }
@@ -259,17 +287,42 @@ export class Canvas2D {
     const info = NODE_KINDS[n.kind];
     const g = this.#group("node", n.id);
     const b = nodeBox(n);
-    g.appendChild(el("rect", { x: b.x, y: b.y, width: b.w, height: b.h + 28, fill: "transparent", class: "hit" }));
-    g.appendChild(drawGlyph(this.#rc, n.kind, n.x, n.y, NODE_SIZE, this.#base(n.id, n.color ?? info.color)));
+    g.appendChild(
+      el("rect", {
+        x: b.x,
+        y: b.y,
+        width: b.w,
+        height: b.h + 28,
+        fill: "transparent",
+        class: "hit",
+      }),
+    );
+    g.appendChild(
+      drawGlyph(this.#rc, n.kind, n.x, n.y, NODE_SIZE, this.#base(n.id, n.color ?? info.color)),
+    );
     const label = svgText(n.x, b.y + b.h + 16, n.label ?? "", 18);
     label.classList.add("label");
     g.appendChild(label);
     return g;
   }
 
-  #strokes(id: string, pts: readonly Point[], style: StrokeStyle | undefined, arrow: Arrow | undefined, color: string): SVGGElement {
+  #strokes(
+    id: string,
+    pts: readonly Point[],
+    style: StrokeStyle | undefined,
+    arrow: Arrow | undefined,
+    color: string,
+  ): SVGGElement {
     const g = el("g");
-    const o = withDash(this.#base(id, "none", { stroke: color, strokeWidth: 2, roughness: 0.9, fill: undefined as never }), style);
+    const o = withDash(
+      this.#base(id, "none", {
+        stroke: color,
+        strokeWidth: 2,
+        roughness: 0.9,
+        fill: undefined as never,
+      }),
+      style,
+    );
     delete o.fill;
     g.appendChild(this.#rc.linearPath(pts as [number, number][], o));
     const first = pts[0];
@@ -277,8 +330,10 @@ export class Canvas2D {
     const last = pts[pts.length - 1];
     const beforeLast = pts[pts.length - 2];
     if (first && second && last && beforeLast) {
-      if (arrow === "end" || arrow === "both") g.appendChild(arrowHead(this.#rc, beforeLast[0], beforeLast[1], last[0], last[1], o));
-      if (arrow === "start" || arrow === "both") g.appendChild(arrowHead(this.#rc, second[0], second[1], first[0], first[1], o));
+      if (arrow === "end" || arrow === "both")
+        g.appendChild(arrowHead(this.#rc, beforeLast[0], beforeLast[1], last[0], last[1], o));
+      if (arrow === "start" || arrow === "both")
+        g.appendChild(arrowHead(this.#rc, second[0], second[1], first[0], first[1], o));
     }
     return g;
   }
@@ -300,7 +355,17 @@ export class Canvas2D {
     if (e.label) {
       const [mx, my] = pointAlong(pts, 0.5);
       const w = e.label.length * 16 * 0.55 + 12;
-      g.appendChild(el("rect", { x: mx - w / 2, y: my - 12, width: w, height: 24, rx: 6, fill: "#ffffff", opacity: 0.9 }));
+      g.appendChild(
+        el("rect", {
+          x: mx - w / 2,
+          y: my - 12,
+          width: w,
+          height: 24,
+          rx: 6,
+          fill: "#ffffff",
+          opacity: 0.9,
+        }),
+      );
       g.appendChild(svgText(mx, my, e.label, 16, { color: e.color ?? "#495057" }));
     }
     return g;
@@ -317,9 +382,16 @@ export class Canvas2D {
     const g = this.#group("note", n.id);
     const size = TEXT_SIZES[n.size ?? "m"];
     const b = noteBox(n);
-    g.appendChild(el("rect", { x: b.x, y: b.y, width: b.w, height: b.h, fill: "transparent", class: "hit" }));
+    g.appendChild(
+      el("rect", { x: b.x, y: b.y, width: b.w, height: b.h, fill: "transparent", class: "hit" }),
+    );
     n.text.split("\n").forEach((line, i) => {
-      g.appendChild(svgText(n.x, n.y + size * 0.62 + i * size * 1.25, line, size, { anchor: "start", color: n.color ?? INK }));
+      g.appendChild(
+        svgText(n.x, n.y + size * 0.62 + i * size * 1.25, line, size, {
+          anchor: "start",
+          color: n.color ?? INK,
+        }),
+      );
     });
     return g;
   }
@@ -395,28 +467,52 @@ export class Canvas2D {
     }
 
     const d = this.#drag;
-    const preview = { fill: "none", stroke: ACCENT, "stroke-width": 1.5, "stroke-dasharray": "6 4", "pointer-events": "none" };
+    const preview = {
+      fill: "none",
+      stroke: ACCENT,
+      "stroke-width": 1.5,
+      "stroke-dasharray": "6 4",
+      "pointer-events": "none",
+    };
     if (d?.kind === "zone") {
       const [x, y, w, h] = rectFrom(d.start, d.cur);
       o.appendChild(el("rect", { x, y, width: w, height: h, ...preview, class: "zone-preview" }));
     }
     if (d?.kind === "connect") {
       const b = findElement(doc, d.from);
-      const from = b?.type === "node" ? ([b.el.x, b.el.y] as Point) : b?.type === "zone" ? ([b.el.x + b.el.w / 2, b.el.y + b.el.h / 2] as Point) : d.cur;
-      o.appendChild(el("line", { x1: from[0], y1: from[1], x2: d.cur[0], y2: d.cur[1], ...preview }));
+      const from =
+        b?.type === "node"
+          ? ([b.el.x, b.el.y] as Point)
+          : b?.type === "zone"
+            ? ([b.el.x + b.el.w / 2, b.el.y + b.el.h / 2] as Point)
+            : d.cur;
+      o.appendChild(
+        el("line", { x1: from[0], y1: from[1], x2: d.cur[0], y2: d.cur[1], ...preview }),
+      );
     }
     if (d?.kind === "line-drag") {
-      o.appendChild(el("line", { x1: d.start[0], y1: d.start[1], x2: d.cur[0], y2: d.cur[1], ...preview }));
+      o.appendChild(
+        el("line", { x1: d.start[0], y1: d.start[1], x2: d.cur[0], y2: d.cur[1], ...preview }),
+      );
     }
     if (this.#lineDraft) {
       const pts = [...this.#lineDraft, this.#cursor];
-      o.appendChild(el("polyline", { points: pts.map((p) => p.join(",")).join(" "), ...preview, class: "line-preview" }));
+      o.appendChild(
+        el("polyline", {
+          points: pts.map((p) => p.join(",")).join(" "),
+          ...preview,
+          class: "line-preview",
+        }),
+      );
     }
   }
 
   // ---------------------------------------------------------------- input
 
-  #hit(e: { clientX: number; clientY: number }): { id: string; type: string } | { handle: Handle } | null {
+  #hit(e: {
+    clientX: number;
+    clientY: number;
+  }): { id: string; type: string } | { handle: Handle } | null {
     const target = document.elementFromPoint(e.clientX, e.clientY);
     const handle = target?.closest<SVGElement>("[data-handle]");
     if (handle?.dataset.handle) return { handle: handle.dataset.handle as Handle };
@@ -444,7 +540,15 @@ export class Canvas2D {
         if (hit && "handle" in hit) {
           const sel = this.#store.state.selection;
           const z = sel ? this.#store.doc.zones.find((z) => z.id === sel) : undefined;
-          if (z) this.#drag = { kind: "resize", id: z.id, handle: hit.handle, orig: zoneBox(z), start: world, moved: false };
+          if (z)
+            this.#drag = {
+              kind: "resize",
+              id: z.id,
+              handle: hit.handle,
+              orig: zoneBox(z),
+              start: world,
+              moved: false,
+            };
           return;
         }
         if (hit) {
@@ -490,8 +594,6 @@ export class Canvas2D {
         requestFocusLabel();
         return;
       }
-      case "hand":
-        return;
     }
   }
 
@@ -577,7 +679,12 @@ export class Canvas2D {
       }
       case "connect": {
         const hit = this.#hit(e);
-        if (hit && "id" in hit && (hit.type === "node" || hit.type === "zone") && hit.id !== d.from) {
+        if (
+          hit &&
+          "id" in hit &&
+          (hit.type === "node" || hit.type === "zone") &&
+          hit.id !== d.from
+        ) {
           let id = "";
           this.#store.edit((doc) => {
             id = addEdge(doc, d.from, hit.id)?.id ?? "";
@@ -620,7 +727,9 @@ export class Canvas2D {
     const pts = this.#lineDraft ?? [];
     this.#lineDraft = null;
     // A double-click adds the same point twice.
-    const dedup = pts.filter((p, i) => i === 0 || p[0] !== pts[i - 1]?.[0] || p[1] !== pts[i - 1]?.[1]);
+    const dedup = pts.filter(
+      (p, i) => i === 0 || p[0] !== pts[i - 1]?.[0] || p[1] !== pts[i - 1]?.[1],
+    );
     if (commit && dedup.length >= 2) this.#commitLine(dedup);
     else this.render();
   }
@@ -672,7 +781,13 @@ export class Canvas2D {
     const style = el("style");
     style.textContent = fontCss;
     clone.insertBefore(style, clone.firstChild);
-    const bg = el("rect", { x: b.x - pad, y: b.y - pad, width: b.w + pad * 2, height: b.h + pad * 2, fill: "#ffffff" });
+    const bg = el("rect", {
+      x: b.x - pad,
+      y: b.y - pad,
+      width: b.w + pad * 2,
+      height: b.h + pad * 2,
+      fill: "#ffffff",
+    });
     clone.insertBefore(bg, clone.querySelector(".viewport"));
     return new XMLSerializer().serializeToString(clone);
   }
@@ -684,7 +799,11 @@ function rectFrom(a: Point, b: Point): [number, number, number, number] {
 
 export function isTyping(e: Event): boolean {
   const t = e.target;
-  return t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
+  return (
+    t instanceof HTMLInputElement ||
+    t instanceof HTMLTextAreaElement ||
+    t instanceof HTMLSelectElement
+  );
 }
 
 export function requestFocusLabel(): void {

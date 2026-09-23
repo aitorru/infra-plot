@@ -61,7 +61,10 @@ export function clipToBox(b: Box, p: Point, pad = 6): Point {
   if (dx === 0 && dy === 0) return [cx, cy];
   const hw = b.w / 2 + pad;
   const hh = b.h / 2 + pad;
-  const t = Math.min(dx === 0 ? Infinity : hw / Math.abs(dx), dy === 0 ? Infinity : hh / Math.abs(dy));
+  const t = Math.min(
+    dx === 0 ? Infinity : hw / Math.abs(dx),
+    dy === 0 ? Infinity : hh / Math.abs(dy),
+  );
   if (t >= 1) return [cx, cy];
   return [cx + dx * t, cy + dy * t];
 }
@@ -153,5 +156,5 @@ export function hashSeed(s: string): number {
     h ^= s.charCodeAt(i);
     h = Math.imul(h, 16777619);
   }
-  return (h >>> 1) || 1;
+  return h >>> 1 || 1;
 }

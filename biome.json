@@ -2,7 +2,14 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
-    "includes": ["**", "!**/dist", "!**/generated.ts", "!schema", "!**/playwright-report", "!**/test-results"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/generated.ts",
+      "!schema",
+      "!**/playwright-report",
+      "!**/test-results"
+    ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
   "linter": {

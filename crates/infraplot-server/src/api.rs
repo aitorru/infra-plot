@@ -20,10 +20,7 @@ pub fn router(store: Store) -> Router {
         .route("/schema", get(schema))
         .route("/validate", post(validate))
         .route("/diagrams", get(list))
-        .route(
-            "/diagrams/{id}",
-            get(fetch).put(save).delete(remove),
-        )
+        .route("/diagrams/{id}", get(fetch).put(save).delete(remove))
         .with_state(store)
 }
 
@@ -93,8 +90,8 @@ async fn schema() -> impl IntoResponse {
 
 /// Parses a request body as TOML or JSON depending on its `Content-Type`.
 fn parse_body(headers: &HeaderMap, body: &Bytes) -> ApiResult<Diagram> {
-    let text = std::str::from_utf8(body)
-        .map_err(|_| ApiError::BadRequest("body must be UTF-8".into()))?;
+    let text =
+        std::str::from_utf8(body).map_err(|_| ApiError::BadRequest("body must be UTF-8".into()))?;
     let is_toml = headers
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
@@ -111,10 +108,14 @@ fn render(diagram: &Diagram, format: Format) -> ApiResult<Response> {
     Ok(match format {
         Format::Json => Json(diagram).into_response(),
         Format::Toml => {
-            let body = diagram.to_toml().map_err(|e| {
-                ApiError::Internal(std::io::Error::other(e))
-            })?;
-            ([(header::CONTENT_TYPE, "application/toml; charset=utf-8")], body).into_response()
+            let body = diagram
+                .to_toml()
+                .map_err(|e| ApiError::Internal(std::io::Error::other(e)))?;
+            (
+                [(header::CONTENT_TYPE, "application/toml; charset=utf-8")],
+                body,
+            )
+                .into_response()
         }
     })
 }
