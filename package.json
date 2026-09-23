@@ -1,0 +1,12 @@
+{
+  "name": "infra-plot",
+  "private": true,
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "check": "biome check .",
+    "fix": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14"
+  }
+}

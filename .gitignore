@@ -1,0 +1,10 @@
+/target
+node_modules/
+dist/
+/data
+.devenv*
+devenv.local.nix
+.pre-commit-config.yaml
+playwright-report/
+test-results/
+.direnv

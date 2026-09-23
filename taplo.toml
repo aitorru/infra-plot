@@ -1,0 +1,6 @@
+include = ["**/*.toml"]
+exclude = ["target/**", "node_modules/**", ".devenv/**"]
+
+[formatting]
+align_entries = false
+array_auto_collapse = true
