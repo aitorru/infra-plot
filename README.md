@@ -46,6 +46,8 @@ Las cachés de cargo y pnpm viven en `.devenv/state/`, junto al repo.
 | `R` / `C` / `L` / `T` | Zona / conectar / línea libre / nota |
 | `2` / `3` | Vista 2D / 3D |
 | `F` | Encajar el diagrama |
+| `Q` / `E` | Vista 3D: girar 90° a izquierda / derecha |
+| `P` | Animar paquetes por los edges (3D) |
 | `Supr` | Borrar la selección (y sus edges) |
 | `Ctrl+Z` / `Ctrl+Y` | Deshacer / rehacer |
 | `Ctrl+D` | Duplicar |
@@ -55,6 +57,25 @@ Las cachés de cargo y pnpm viven en `.devenv/state/`, junto al repo.
 Los ficheros `.json`/`.toml` se importan con «Import…» o arrastrándolos a la ventana. Los
 exports SVG y PNG (2×) llevan la fuente Kalam incrustada, así que se ven igual sin conexión.
 Los ejemplos de `examples/` aparecen en «Open…».
+
+### Vista 3D
+
+Vista isométrica con three.js, generada desde el mismo documento que la 2D:
+
+- Cámara ortográfica isométrica. Arrastrar desplaza, botón derecho orbita (con límites),
+  la rueda hace zoom; `Q`/`E` giran 90° y `F` encaja el diagrama.
+- Las zonas son losas apiladas según su anidamiento, con borde de tinta (sólido, discontinuo
+  o punteado según su estilo) y la etiqueta impresa encima.
+- Cada tipo de nodo tiene su modelo low-poly (rack, cilindros de BBDD, heptágono de K8s,
+  nube…) con contorno a mano alzada. Las etiquetas usan Kalam.
+- Los edges son arcos (o tramos ortogonales) con flechas; los paquetes animados se activan
+  o desactivan con `P` y arrancan apagados si el sistema pide movimiento reducido.
+- Clic selecciona; arrastrar un nodo o una zona lo mueve sobre el suelo (con su contenido y
+  ajustado a la rejilla; `Alt` desactiva el ajuste). También se pueden colocar nodos y
+  conectar. Zonas, líneas y notas se dibujan en 2D.
+- «PNG» en 3D exporta una foto de la vista actual a 3× (máximo 4096 px).
+- Para tests y capturas, `[data-testid=view-3d]` expone `data-nodes`, `data-zones`,
+  `data-edges`, `data-meshes`, `data-azimuth`, `data-zoom`…
 
 ## CI
 

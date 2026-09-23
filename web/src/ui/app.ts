@@ -10,6 +10,7 @@ import {
   serialize,
 } from "../model/doc";
 import { Canvas2D, isTyping } from "../render2d/canvas2d";
+import { Scene3D } from "../render3d/scene3d";
 import { deleteElement, duplicateElement } from "../state/ops";
 import { Store, type Tool, type View } from "../state/store";
 import { button, download, downloadBlob, h, slug } from "./dom";
@@ -27,7 +28,10 @@ function sameTool(a: Tool, b: Tool): boolean {
 
 export function mountApp(root: HTMLElement): void {
   const route = parseRoute();
-  const store = new Store({ view: route.view });
+  const store = new Store({
+    view: route.view,
+    animate: !matchMedia("(prefers-reduced-motion: reduce)").matches,
+  });
   root.classList.toggle("embed", route.embed);
 
   // ------------------------------------------------------------ toasts
@@ -57,7 +61,7 @@ export function mountApp(root: HTMLElement): void {
   const openDoc = (doc: Doc, docId: string | null): void => {
     store.load(doc, docId);
     updateRoute({ docId, src: null });
-    requestAnimationFrame(() => canvas.fit());
+    requestAnimationFrame(fit);
   };
 
   const openExample = async (ex: Example): Promise<void> => {
@@ -93,7 +97,7 @@ export function mountApp(root: HTMLElement): void {
     }
     // Keep `?src=` so the link stays shareable until the user saves elsewhere.
     store.load(result.doc, null);
-    requestAnimationFrame(() => canvas.fit());
+    requestAnimationFrame(fit);
     return true;
   };
 
@@ -118,7 +122,11 @@ export function mountApp(root: HTMLElement): void {
 
   const exportPng = async (): Promise<void> => {
     try {
-      downloadBlob(`${slug(store.doc.title)}.png`, await svgToPng(await standaloneSvg(), 2));
+      const png =
+        store.state.view === "3d"
+          ? await scene3d.exportPng(3)
+          : await svgToPng(await standaloneSvg(), 2);
+      downloadBlob(`${slug(store.doc.title)}${store.state.view === "3d" ? "-3d" : ""}.png`, png);
     } catch (e) {
       toast(`PNG export failed: ${e}`, true);
     }
@@ -211,7 +219,7 @@ export function mountApp(root: HTMLElement): void {
       button("JSON", () => exportAs("json"), "Export JSON"),
       button("TOML", () => exportAs("toml"), "Export TOML"),
       button("SVG", () => void exportSvg(), "Export SVG"),
-      button("PNG", () => void exportPng(), "Export PNG (2×)"),
+      button("PNG", () => void exportPng(), "Export PNG (2× in 2D, 3× photo of the 3D view)"),
     ),
     fileInput,
   );
@@ -291,18 +299,39 @@ export function mountApp(root: HTMLElement): void {
   // ------------------------------------------------------------ stage
 
   const stage = h("main", { class: "stage" });
-  const view3d = h(
-    "div",
-    { class: "view3d", "data-testid": "view-3d", hidden: "" },
-    h("p", {}, "The isometric 3D view is not implemented yet."),
-    button("Back to 2D", () => setView("2d"), "2D view (2)"),
-  );
+  const view3d = h("div", { class: "view3d", "data-testid": "view-3d", hidden: "" });
   root.append(topbar, palette, stage, props.el, toasts, library.el);
   const canvas = new Canvas2D(stage, store);
   stage.append(view3d);
+  const scene3d = new Scene3D(view3d, store);
+  const fit = (): void => {
+    canvas.fit();
+    scene3d.fit();
+  };
+
+  const toggleAnimate = (): void => store.set({ animate: !store.state.animate });
+  const packetsBtn = button("Packets", toggleAnimate, "Animate packets along edges (P)");
+  if (scene3d.available) {
+    view3d.append(
+      h(
+        "div",
+        { class: "toolbar3d", "data-testid": "toolbar-3d" },
+        button("⟲", () => scene3d.rotate(-1), "Rotate 90° left (Q)"),
+        button("⟳", () => scene3d.rotate(1), "Rotate 90° right (E)"),
+        button("Fit", () => scene3d.fit(), "Fit the diagram (F)"),
+        packetsBtn,
+        h(
+          "span",
+          { class: "muted hint" },
+          "Drag: pan · right-drag: orbit · wheel: zoom · zones, lines and notes are drawn in 2D",
+        ),
+      ),
+    );
+  }
 
   store.subscribe((state, prev) => {
     canvas.render();
+    scene3d.render();
     if (document.activeElement !== title) title.value = state.doc.title;
     undoBtn.disabled = !store.canUndo;
     redoBtn.disabled = !store.canRedo;
@@ -310,6 +339,9 @@ export function mountApp(root: HTMLElement): void {
     for (const [view, b] of viewButtons) b.classList.toggle("active", view === state.view);
     canvas.svg.toggleAttribute("hidden", state.view !== "2d");
     view3d.toggleAttribute("hidden", state.view !== "3d");
+    scene3d.setVisible(state.view === "3d");
+    packetsBtn.classList.toggle("active", state.animate);
+    packetsBtn.setAttribute("aria-pressed", String(state.animate));
     root.dataset.view = state.view;
     if (state.view === "2d" && prev.view !== "2d") requestAnimationFrame(() => canvas.fit());
     props.render(state);
@@ -348,11 +380,16 @@ export function mountApp(root: HTMLElement): void {
     if (tool) store.set({ tool });
     else if (key === "2") setView("2d");
     else if (key === "3") setView("3d");
+    else if (key === "p") toggleAnimate();
+    else if ((key === "q" || key === "e") && store.state.view === "3d")
+      scene3d.rotate(key === "q" ? -1 : 1);
     else if (key === "delete" || key === "backspace") remove();
     else if (key === "escape") {
       if (!canvas.cancelDrafts()) store.set({ selection: null, tool: { type: "select" } });
-    } else if (key === "f") canvas.fit();
-    else return;
+    } else if (key === "f") {
+      if (store.state.view === "3d") scene3d.fit();
+      else canvas.fit();
+    } else return;
     e.preventDefault();
   });
 
@@ -385,9 +422,13 @@ export function mountApp(root: HTMLElement): void {
       if (result?.ok) store.load(result.doc, null);
     }
     store.set({});
+    // Load Kalam explicitly: the 3D labels are canvas textures, which don't request fonts.
+    await Promise.all([document.fonts.load("20px Kalam"), document.fonts.load("700 20px Kalam")]);
     await document.fonts.ready;
     canvas.invalidate();
-    canvas.fit();
+    scene3d.invalidate();
+    fit();
+    scene3d.flush();
     // Lets screenshot tooling wait for a fully drawn diagram.
     root.dataset.ready = "true";
   };
