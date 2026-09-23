@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CI: "true"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/devenv
+      - name: Lint (rustfmt, clippy, tsc, biome, taplo, playwright pin)
+        run: devenv shell -- lint
+      - name: Schema and generated types are up to date
+        run: |
+          devenv shell -- gen-schema
+          git diff --exit-code -- schema web/src/model/generated.ts
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/devenv
+      - name: cargo deny
+        run: devenv shell -- cargo deny check
+      - name: pnpm audit
+        run: devenv shell -- pnpm audit --audit-level moderate
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/devenv
+      - name: Playwright
+        run: devenv --profile e2e shell -- e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 14

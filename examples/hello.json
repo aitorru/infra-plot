@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "title": "Hello infra-plot",
+  "zones": [{ "id": "vpc", "kind": "vpc", "label": "VPC", "x": 120, "y": 40, "w": 520, "h": 260 }],
+  "nodes": [
+    { "id": "user", "kind": "user", "label": "User", "x": 40, "y": 170 },
+    { "id": "lb", "kind": "load-balancer", "label": "LB", "x": 220, "y": 170 },
+    { "id": "api", "kind": "service", "label": "API", "x": 390, "y": 170 },
+    { "id": "db", "kind": "database", "label": "Postgres", "x": 560, "y": 170 }
+  ],
+  "edges": [
+    { "id": "e1", "from": "user", "to": "lb", "label": "HTTPS" },
+    { "id": "e2", "from": "lb", "to": "api" },
+    { "id": "e3", "from": "api", "to": "db", "style": "dashed" }
+  ],
+  "notes": [{ "id": "n1", "x": 380, "y": 330, "text": "hello!" }]
+}
