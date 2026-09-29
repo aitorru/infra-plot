@@ -27,9 +27,11 @@ SCREENSHOTS=1 devenv --profile e2e shell -- e2e screenshots   # regenera docs/sc
 ## Escribir tests
 
 Ficheros por área: `smoke` (API + carga), `editor` (edición 2D, import/export, servidor),
-`ui` (paleta, props, menús, exports), `view3d` (vista 3D), `screenshots` (solo con `SCREENSHOTS=1`).
+`ui` (paleta, props, menús, exports), `features` (temas, look, búsqueda en la paleta, codos y
+tiradores de líneas, todos los tipos), `view3d` (vista 3D), `screenshots` (solo con
+`SCREENSHOTS=1`; fuerzan el tema con `?theme=`).
 
-Reutiliza los helpers de `e2e/tests/editor.spec.ts` antes de inventar otros:
+Reutiliza los helpers de `e2e/tests/helpers.ts` antes de inventar otros:
 
 - `ready(page, url)` → `goto` + espera `#app[data-ready="true"]`.
 - `importFile(page, path)` → `getByTestId("file-input").setInputFiles`.

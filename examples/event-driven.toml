@@ -9,7 +9,7 @@ label = "prod account"
 x = 240
 y = 0
 w = 1000
-h = 620
+h = 640
 
 [[zones]]
 id = "az"
@@ -36,7 +36,7 @@ label = "platform"
 x = 260
 y = 460
 w = 960
-h = 140
+h = 160
 
 [[nodes]]
 id = "browser"
@@ -134,43 +134,43 @@ y = 400
 id = "psp"
 kind = "external"
 label = "payments"
-x = 1360
-y = 200
+x = 920
+y = -120
 
 [[nodes]]
 id = "ci"
 kind = "ci-cd"
 label = "CI/CD"
 x = 340
-y = 530
+y = 560
 
 [[nodes]]
 id = "registry"
 kind = "registry"
 label = "registry"
 x = 540
-y = 530
+y = 560
 
 [[nodes]]
 id = "secrets"
 kind = "secrets"
 label = "vault"
 x = 740
-y = 530
+y = 560
 
 [[nodes]]
 id = "logs"
 kind = "logging"
 label = "logs"
 x = 940
-y = 530
+y = 560
 
 [[nodes]]
 id = "metrics"
 kind = "monitoring"
 label = "metrics"
 x = 1120
-y = 530
+y = 560
 
 [[edges]]
 id = "e-browser-cdn"
@@ -185,11 +185,10 @@ to = "gw"
 label = "HTTPS"
 
 [[edges]]
-id = "e-browser-gw"
-from = "browser"
+id = "e-cdn-gw"
+from = "cdn"
 to = "gw"
-route = "orthogonal"
-bend = 0.4
+label = "/api"
 
 [[edges]]
 id = "e-gw-idp"

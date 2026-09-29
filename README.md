@@ -3,9 +3,13 @@
 Editor web de diagramas de infraestructura: vista 2D (limpia o a mano alzada) y vista 3D
 isométrica, reproducibles desde JSON/TOML. Temas claro, oscuro, Solarized y NieR.
 
-![Editor 2D con el ejemplo three-tier](docs/screenshots/editor-2d.png)
+![Editor 2D con el ejemplo event-driven, tema claro y look clean](docs/screenshots/editor-2d.png)
 
 ![Vista 3D isométrica del ejemplo k8s-platform](docs/screenshots/view-3d.png)
+
+| Tema oscuro | NieR, look sketch | Vista 3D en Solarized |
+| --- | --- | --- |
+| ![Editor 2D en tema oscuro](docs/screenshots/editor-2d-dark.png) | ![Look sketch con el tema NieR](docs/screenshots/editor-2d-nier.png) | ![Vista 3D con el tema Solarized](docs/screenshots/view-3d-solarized.png) |
 
 ## Desarrollo
 

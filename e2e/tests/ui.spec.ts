@@ -13,11 +13,11 @@ async function openHello(page: Page, url = "/"): Promise<void> {
   await expect(page.locator(".layer-nodes > g")).toHaveCount(hello.nodes.length);
 }
 
-test("palette shows rough icons for every kind", async ({ page }) => {
+test("palette shows clean icons for every kind", async ({ page }) => {
   await page.goto("/");
   const palette = page.getByTestId("palette");
-  // 8 zone kinds + 20 node kinds, each with a sketched icon.
-  await expect(palette.locator("svg.icon")).toHaveCount(28);
+  // 12 zone kinds + 42 node kinds, each with a clean icon.
+  await expect(palette.locator("svg.icon")).toHaveCount(54);
   await expect(palette.locator('[data-tool="database"] svg.icon path').first()).toBeVisible();
 });
 
@@ -41,6 +41,7 @@ test("examples menu loads a TOML example", async ({ page }) => {
   await page.getByRole("button", { name: "Open…" }).click();
   const examplesList = page.getByTestId("examples");
   await expect(examplesList.getByRole("button")).toHaveText([
+    "event-driven.toml",
     "hello.json",
     "k8s-platform.toml",
     "three-tier.toml",
@@ -120,7 +121,10 @@ test("?src= loads a remote file and ?embed=1 hides the editor chrome", async ({ 
   await expect(page.getByTestId("props")).toBeHidden();
 });
 
-test("SVG and PNG exports embed the Kalam font", async ({ page }) => {
+test("SVG and PNG exports embed the look's font: Inter for clean, Kalam for sketch", async ({
+  page,
+}) => {
+  // hello.json is `look = "sketch"`.
   await openHello(page);
   const [svgDownload] = await Promise.all([
     page.waitForEvent("download"),
@@ -140,4 +144,18 @@ test("SVG and PNG exports embed the Kalam font", async ({ page }) => {
   // 2× the SVG's width.
   const svgWidth = Number(/width="(\d+(?:\.\d+)?)"/.exec(svg)?.[1]);
   expect(png.readUInt32BE(16)).toBe(Math.ceil(svgWidth * 2));
+
+  // A fresh diagram defaults to the clean look, which embeds Inter instead.
+  await page.getByRole("button", { name: "New" }).click();
+  await page.getByTestId("palette").locator('[data-tool="server"]').click();
+  const canvasBox = await page.getByTestId("canvas-2d").boundingBox();
+  if (!canvasBox) throw new Error("no canvas");
+  await page.mouse.click(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+  const [cleanSvgDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "SVG", exact: true }).click(),
+  ]);
+  const cleanSvg = readFileSync((await cleanSvgDownload.path()) ?? "", "utf8");
+  expect(cleanSvg).toContain("@font-face{font-family:'Inter Variable'");
+  expect(cleanSvg).not.toContain("font-family:Kalam");
 });
