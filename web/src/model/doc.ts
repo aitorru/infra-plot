@@ -1,12 +1,13 @@
 import Ajv2020 from "ajv/dist/2020";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 import schema from "../../../schema/diagram.schema.json";
-import type { Diagram, Edge, Line, Node, Note, Zone } from "./generated";
+import type { Diagram, Edge, Line, Look, Node, Note, Zone } from "./generated";
 
 export type {
   Arrow,
   Edge,
   Line,
+  Look,
   Node,
   NodeKind,
   Note,
@@ -24,6 +25,7 @@ export interface Doc {
   version: number;
   title: string;
   description: string;
+  look: Look;
   zones: Zone[];
   nodes: Node[];
   edges: Edge[];
@@ -54,6 +56,7 @@ export function emptyDoc(title = "Untitled diagram"): Doc {
     version: FORMAT_VERSION,
     title,
     description: "",
+    look: "clean",
     zones: [],
     nodes: [],
     edges: [],
@@ -67,6 +70,7 @@ export function normalize(d: Diagram): Doc {
     version: d.version,
     title: d.title,
     description: d.description ?? "",
+    look: d.look ?? "clean",
     zones: d.zones ?? [],
     nodes: d.nodes ?? [],
     edges: d.edges ?? [],
@@ -98,6 +102,8 @@ export function toDiagram(doc: Doc): Diagram {
     version: doc.version,
     title: doc.title,
     description: doc.description,
+    // `clean` is the default; leaving it out keeps files minimal.
+    look: doc.look === "clean" ? undefined : doc.look,
     zones: doc.zones,
     nodes: doc.nodes,
     edges: doc.edges,
@@ -182,6 +188,9 @@ export function validate(doc: Doc): Issue[] {
     if (!targets.has(e.from)) push(`edges[${i}].from`, `unknown node or zone \`${e.from}\``);
     if (!targets.has(e.to)) push(`edges[${i}].to`, `unknown node or zone \`${e.to}\``);
     if (e.from === e.to) push(`edges[${i}]`, "an edge cannot connect an element to itself");
+    if (e.bend != null && !(e.bend >= 0 && e.bend <= 1)) {
+      push(`edges[${i}].bend`, "bend must be a number between 0 and 1");
+    }
   });
   doc.lines.forEach((l, i) => {
     check(`lines[${i}]`, l, l.points.flat());

@@ -182,6 +182,9 @@ function parts(kind: NodeKind, H: number): Part[] {
         { geo: box(6, 18, 6, 0, 4), color: "dark" },
         { geo: box(60, H - 22, 6, 0, 22) },
       ];
+    // TODO(3d agent): dedicated models for the new generic kinds.
+    default:
+      return [{ geo: box(56, H, 56) }];
   }
 }
 
