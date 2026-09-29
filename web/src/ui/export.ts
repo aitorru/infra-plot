@@ -1,13 +1,15 @@
-/** Standalone SVG / PNG export with the Kalam web font embedded as data URLs. */
+/** Standalone SVG / PNG export with the UI/sketch web fonts embedded as data URLs. */
 import kalam400 from "@fontsource/kalam/files/kalam-latin-400-normal.woff2?url";
 import kalam700 from "@fontsource/kalam/files/kalam-latin-700-normal.woff2?url";
+import interVariable from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
+import type { Look } from "../model/doc";
 
-const FONTS = [
-  { weight: 400, url: kalam400 },
-  { weight: 700, url: kalam700 },
+const KALAM_FONTS = [
+  { weight: "400", url: kalam400 },
+  { weight: "700", url: kalam700 },
 ] as const;
 
-let fontCss: Promise<string> | null = null;
+const fontCss = new Map<Look, Promise<string>>();
 
 async function dataUrl(url: string): Promise<string> {
   const res = await fetch(url);
@@ -22,21 +24,39 @@ async function dataUrl(url: string): Promise<string> {
   });
 }
 
-/** `@font-face` rules for Kalam, so exports render the same without network access. */
-export function embeddedFontCss(): Promise<string> {
-  fontCss ??= Promise.all(
-    FONTS.map(
+async function kalamCss(): Promise<string> {
+  const rules = await Promise.all(
+    KALAM_FONTS.map(
       async ({ weight, url }) =>
         `@font-face{font-family:Kalam;font-style:normal;font-weight:${weight};` +
         `src:url(${await dataUrl(url)}) format("woff2");}`,
     ),
-  )
-    .then((rules) => rules.join("\n"))
-    .catch((e: unknown) => {
-      fontCss = null;
+  );
+  return rules.join("\n");
+}
+
+async function interCss(): Promise<string> {
+  const url = await dataUrl(interVariable);
+  return (
+    "@font-face{font-family:'Inter Variable';font-style:normal;font-weight:100 900;" +
+    `src:url(${url}) format("woff2-variations");}`
+  );
+}
+
+/**
+ * `@font-face` rules for the font the given `look` needs, so exports render the same without
+ * network access: Kalam for `sketch`, Inter for `clean`.
+ */
+export function embeddedFontCss(look: Look): Promise<string> {
+  let css = fontCss.get(look);
+  if (!css) {
+    css = (look === "sketch" ? kalamCss() : interCss()).catch((e: unknown) => {
+      fontCss.delete(look);
       throw e;
     });
-  return fontCss;
+    fontCss.set(look, css);
+  }
+  return css;
 }
 
 /** Rasterises a standalone SVG string (as produced by `Canvas2D.exportSvg`). */

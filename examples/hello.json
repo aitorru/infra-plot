@@ -1,6 +1,7 @@
 {
   "version": 1,
   "title": "Hello infra-plot",
+  "look": "sketch",
   "zones": [{ "id": "vpc", "kind": "vpc", "label": "VPC", "x": 120, "y": 40, "w": 520, "h": 260 }],
   "nodes": [
     { "id": "user", "kind": "user", "label": "User", "x": 40, "y": 170 },

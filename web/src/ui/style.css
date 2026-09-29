@@ -1,23 +1,79 @@
+/*
+ * Editor chrome. Colours are CSS custom properties, one block per theme (`:root[data-theme=…]`),
+ * matching `THEMES` in `theme.ts`; the 2D/3D canvases read `theme()` directly instead. The
+ * `--ui-font` stack mirrors `UI_FONT_FAMILY` in `model/catalog.ts` (the `sketch` look still uses
+ * Kalam, but only inside the canvases).
+ */
+
 :root {
-  --ink: #1e1e1e;
-  --accent: #6965db;
-  --paper: #fdfcf8;
+  --ui-font: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Light (default / fallback, also used before the theme attribute is set). */
+  --paper: #f8f9fa;
   --panel: #ffffff;
-  --line: #e3e2de;
-  font-family: Kalam, "Comic Sans MS", cursive;
-  color: var(--ink);
+  --ink: #1f2328;
+  --muted: #6a737d;
+  --line: #e1e4e8;
+  --accent: #4f5bd5;
+  --accent-ink: #ffffff;
+  --danger: #cf222e;
+  --hover: rgb(0 0 0 / 6%);
+  --input-bg: #ffffff;
+  --shadow: 0 8px 24px rgb(0 0 0 / 14%);
+  --focus-ring: rgb(79 91 213 / 35%);
+}
+
+:root[data-theme="dark"] {
+  --paper: #15171c;
+  --panel: #1e2127;
+  --ink: #e6e8eb;
+  --muted: #8b949e;
+  --line: #30353d;
+  --accent: #8c95ff;
+  --accent-ink: #14161d;
+  --danger: #ff6b6b;
+  --hover: rgb(255 255 255 / 8%);
+  --input-bg: #14161b;
+  --shadow: 0 8px 24px rgb(0 0 0 / 55%);
+  --focus-ring: rgb(140 149 255 / 40%);
+  color-scheme: dark;
+}
+
+:root[data-theme="solarized"] {
+  --paper: #002b36;
+  --panel: #073642;
+  --ink: #eee8d5;
+  --muted: #839496;
+  --line: #124a56;
+  --accent: #268bd2;
+  --accent-ink: #002b36;
+  --danger: #dc322f;
+  --hover: rgb(255 255 255 / 6%);
+  --input-bg: #052f3a;
+  --shadow: 0 8px 24px rgb(0 0 0 / 55%);
+  --focus-ring: rgb(38 139 210 / 40%);
+  color-scheme: dark;
+}
+
+/* Beige/sepia, dark-brown ink, inverted bars for active/hover states — evokes NieR:Automata. */
+:root[data-theme="nier"] {
+  --paper: #d1cdb7;
+  --panel: #dad4bb;
+  --ink: #4e4b42;
+  --muted: #7d796b;
+  --line: #b4ae96;
+  --accent: #4e4b42;
+  --accent-ink: #d8d3b9;
+  --danger: #a8442e;
+  --hover: rgb(78 75 66 / 10%);
+  --input-bg: #e4e0cb;
+  --shadow: 0 2px 0 rgb(78 75 66 / 25%);
+  --focus-ring: rgb(78 75 66 / 35%);
+  color-scheme: light;
 }
 
 * {
   box-sizing: border-box;
-}
-
-.stage > [hidden] {
-  display: none;
-}
-
-.muted {
-  opacity: 0.6;
 }
 
 html,
@@ -29,28 +85,53 @@ body,
   background: var(--paper);
 }
 
+body {
+  font-family: var(--ui-font);
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.muted {
+  color: var(--muted);
+}
+
 #app {
   display: grid;
-  grid-template: "top top top" auto "palette stage props" 1fr / 180px 1fr 240px;
+  grid-template: "top top top" auto "palette stage props" 1fr / 200px 1fr 260px;
 }
+
+/* ---------------------------------------------------------------- top bar */
 
 .topbar {
   grid-area: top;
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
 
 .topbar .title {
   font: inherit;
-  font-size: 20px;
-  font-weight: 700;
-  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: 6px;
   background: transparent;
-  min-width: 12ch;
+  min-width: 14ch;
+  padding: 4px 6px;
+  color: var(--ink);
+}
+
+.topbar .title:hover {
+  border-color: var(--line);
+}
+
+.topbar .title:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--input-bg);
 }
 
 .topbar .spacer {
@@ -63,34 +144,66 @@ body,
   align-items: center;
 }
 
+.topbar .group + .group::before {
+  content: "";
+  width: 1px;
+  align-self: stretch;
+  margin: 0 2px;
+  background: var(--line);
+}
+
 .topbar .segmented {
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 1px;
+  border-radius: 8px;
+  padding: 2px;
   gap: 0;
+  background: var(--paper);
 }
+
+/* ---------------------------------------------------------------- buttons, inputs */
 
 button {
   font: inherit;
+  font-size: 12.5px;
   border: 1px solid var(--line);
   background: var(--panel);
-  border-radius: 8px;
-  padding: 2px 10px;
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 5px 10px;
   cursor: pointer;
+  transition:
+    background-color 0.1s ease,
+    border-color 0.1s ease;
 }
 
-button:hover {
-  border-color: var(--accent);
+button:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: var(--muted);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 button.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
   border-color: var(--accent);
 }
 
 .segmented button {
   border-color: transparent;
+  background: transparent;
+  border-radius: 6px;
+}
+
+.segmented button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 button:disabled {
@@ -98,10 +211,53 @@ button:disabled {
   cursor: default;
 }
 
+button.danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+select {
+  cursor: pointer;
+}
+
+input[type="search"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type="color"] {
+  padding: 2px;
+  height: 28px;
+  width: 100%;
+  background: var(--panel);
+}
+
+input[type="range"] {
+  padding: 0;
+  border: none;
+  background: transparent;
+  accent-color: var(--accent);
+  flex: 1;
+}
+
+/* ---------------------------------------------------------------- palette / props panels */
+
 .palette,
 .props {
   overflow-y: auto;
-  padding: 8px;
+  padding: 10px;
   background: var(--panel);
 }
 
@@ -116,11 +272,31 @@ button:disabled {
 }
 
 .palette h3,
-.props h3 {
-  margin: 8px 0 4px;
-  font-size: 14px;
+.props h3,
+.library h3 {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  opacity: 0.6;
+  color: var(--muted);
+}
+
+.palette h3:first-child,
+.props h3:first-child {
+  margin-top: 2px;
+}
+
+:root[data-theme="nier"] .palette h3::before,
+:root[data-theme="nier"] .props h3::before,
+:root[data-theme="nier"] .library h3::before {
+  content: "▪ ";
+  color: var(--ink);
+}
+
+.palette input[type="search"] {
+  width: 100%;
+  margin-bottom: 6px;
 }
 
 .palette .grid {
@@ -130,9 +306,13 @@ button:disabled {
 }
 
 .palette .grid button {
-  font-size: 12px;
-  padding: 4px 2px 2px;
-  line-height: 1.1;
+  font-size: 11px;
+  padding: 4px 2px 3px;
+  line-height: 1.15;
+}
+
+.palette .grid button[hidden] {
+  display: none;
 }
 
 .palette .tile {
@@ -148,7 +328,7 @@ button:disabled {
 }
 
 button.active .icon {
-  filter: drop-shadow(0 0 1px #fff);
+  filter: drop-shadow(0 0 1px var(--accent-ink));
 }
 
 .tools {
@@ -157,10 +337,16 @@ button.active .icon {
   gap: 4px;
 }
 
+/* ---------------------------------------------------------------- stage */
+
 .stage {
   grid-area: stage;
   position: relative;
   overflow: hidden;
+}
+
+.stage > [hidden] {
+  display: none;
 }
 
 .canvas2d {
@@ -169,40 +355,72 @@ button.active .icon {
   display: block;
   touch-action: none;
   user-select: none;
+  background: var(--paper);
 }
 
 .canvas2d.panning {
   cursor: grab;
 }
 
+/* ---------------------------------------------------------------- properties fields */
+
 .props label {
   display: block;
-  font-size: 13px;
-  margin-top: 6px;
+  font-size: 12px;
+  margin-top: 10px;
 }
 
 .props label > span {
   display: block;
-  opacity: 0.7;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .props .row {
   display: flex;
-  gap: 4px;
-}
-
-.props input[type="color"] {
-  padding: 0;
-  height: 28px;
+  gap: 6px;
+  align-items: center;
 }
 
 .props .row button {
   flex: none;
 }
 
+.props .bend-readout {
+  min-width: 3.5ch;
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.props .swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.props .swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+}
+
+.props .swatch.active {
+  border-color: var(--ink);
+  box-shadow:
+    0 0 0 1px var(--panel),
+    0 0 0 3px var(--accent);
+}
+
 .props .stats {
-  font-size: 13px;
-  opacity: 0.7;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .props .meta-row {
@@ -215,18 +433,12 @@ button.active .icon {
 .props .actions {
   display: flex;
   gap: 6px;
-  margin-top: 16px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
 }
 
-.props input,
-.props textarea,
-.props select {
-  font: inherit;
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 2px 6px;
-}
+/* ---------------------------------------------------------------- toasts */
 
 .toasts {
   position: fixed;
@@ -241,19 +453,25 @@ button.active .icon {
 
 .toast {
   background: var(--ink);
-  color: #fff;
-  padding: 6px 14px;
+  color: var(--paper);
+  font-size: 12.5px;
+  padding: 8px 14px;
   border-radius: 8px;
+  box-shadow: var(--shadow);
   white-space: pre-line;
 }
 
 .toast.error {
-  background: #c92a2a;
+  background: var(--danger);
+  color: #fff;
 }
+
+/* ---------------------------------------------------------------- 3D view */
 
 .view3d {
   position: absolute;
   inset: 0;
+  background: var(--paper);
 }
 
 .view3d[data-webgl="unavailable"] {
@@ -277,11 +495,13 @@ button.active .icon {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .toolbar3d .hint {
-  font-size: 13px;
+  font-size: 12px;
   padding: 0 4px;
+  color: var(--muted);
 }
 
 /* ?embed=1: just the canvas. */
@@ -301,37 +521,36 @@ button.active .icon {
   outline-offset: -12px;
 }
 
+/* ---------------------------------------------------------------- library dialog */
+
 .library {
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 12px 16px;
+  padding: 14px 18px 18px;
   width: min(520px, 92vw);
   max-height: 80vh;
   font: inherit;
-  color: inherit;
+  color: var(--ink);
   background: var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .library::backdrop {
-  background: rgb(0 0 0 / 0.25);
+  background: rgb(0 0 0 / 35%);
 }
 
 .library header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
 }
 
 .library h2 {
   margin: 0;
-  font-size: 22px;
-}
-
-.library h3 {
-  margin: 12px 0 4px;
-  font-size: 14px;
-  text-transform: uppercase;
-  opacity: 0.6;
+  font-size: 17px;
+  font-weight: 600;
 }
 
 .library .list {
@@ -354,9 +573,5 @@ button.active .icon {
 }
 
 .library small {
-  opacity: 0.6;
-}
-
-button.danger:hover {
-  border-color: #c92a2a;
+  color: var(--muted);
 }

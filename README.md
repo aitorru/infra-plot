@@ -1,7 +1,7 @@
 # infra-plot
 
-Editor web de diagramas de infraestructura: vista 2D estilo sketch y vista 3D isométrica,
-reproducibles desde JSON/TOML.
+Editor web de diagramas de infraestructura: vista 2D (limpia o a mano alzada) y vista 3D
+isométrica, reproducibles desde JSON/TOML. Temas claro, oscuro, Solarized y NieR.
 
 ![Editor 2D con el ejemplo three-tier](docs/screenshots/editor-2d.png)
 
@@ -42,10 +42,12 @@ rejilla de 20.
 version = 1                      # obligatorio, siempre 1
 title = "Hello infra-plot"       # obligatorio
 description = "Opcional"
+look = "clean"                   # clean (por defecto, vectorial) · sketch (a mano alzada)
 
 [[zones]]                        # rectángulos: x, y = esquina superior izquierda
 id = "vpc"
-kind = "vpc"                     # generic · region · vpc · subnet · dmz · k8s-cluster · namespace · on-prem
+kind = "vpc"                     # generic · region · vpc · subnet · dmz · availability-zone · account
+                                 # security-group · k8s-cluster · namespace · on-prem · data-center
 label = "VPC"
 x = 120
 y = 40
@@ -55,7 +57,7 @@ h = 260
 
 [[nodes]]                        # x, y = centro del icono
 id = "api"
-kind = "service"                 # 20 tipos, ver abajo
+kind = "service"                 # 41 tipos, ver abajo
 label = "API"
 x = 390
 y = 170
@@ -74,7 +76,9 @@ to = "db"
 label = "SQL"
 style = "dashed"                 # solid (por defecto) · dashed · dotted
 arrow = "end"                    # end (por defecto) · start · both · none
-route = "straight"               # straight (por defecto) · orthogonal
+route = "orthogonal"             # straight (por defecto) · orthogonal
+bend = 0.3                       # solo orthogonal: dónde cae el tramo central, de 0 (from) a 1 (to);
+                                 # por defecto 0.5
 
 [[lines]]                        # trazos libres, sin anclar a nada
 id = "l1"
@@ -89,9 +93,17 @@ text = "hello!"
 size = "m"                       # s · m (por defecto) · l · xl
 ```
 
-Tipos de nodo: `service`, `server`, `vm`, `container`, `pod`, `k8s`, `function`, `proxy`,
-`load-balancer`, `api-gateway`, `firewall`, `cdn`, `dns`, `database`, `cache`, `queue`,
-`storage`, `user`, `internet`, `monitoring`.
+Tipos de nodo, por grupos (así aparecen en la paleta):
+
+| Grupo | Tipos |
+| --- | --- |
+| Genérico | `component` |
+| Cómputo | `service`, `server`, `vm`, `container`, `pod`, `k8s`, `function`, `worker`, `scheduler`, `gpu` |
+| Red | `proxy`, `load-balancer`, `api-gateway`, `gateway`, `router`, `switch`, `vpn`, `cdn`, `dns` |
+| Datos | `database`, `cache`, `queue`, `stream`, `storage`, `bucket`, `warehouse`, `search` |
+| Seguridad | `firewall`, `identity`, `secrets` |
+| Operación | `monitoring`, `logging`, `ci-cd`, `registry`, `notification` |
+| Clientes | `user`, `client`, `mobile`, `browser`, `internet`, `external` |
 
 Todos los elementos aceptan `color` (`#rgb` o `#rrggbb`); sin él se usa el del tipo. Además del
 esquema, se comprueba que:
@@ -99,15 +111,17 @@ esquema, se comprueba que:
 - los `id` son únicos en todo el documento;
 - los `from`/`to` de los edges existen y no apuntan al mismo elemento;
 - las zonas tienen ancho y alto positivos, las líneas al menos dos puntos y todas las
-  coordenadas son números finitos.
+  coordenadas son números finitos;
+- `bend` está entre 0 y 1.
 
 El editor valida al importar o abrir, y el servidor al guardar: `PUT /api/diagrams/<id>`
 (JSON, o TOML con `Content-Type: application/toml`) responde `422` con la lista de
 problemas, y `POST /api/validate` solo valida. `GET /api/diagrams/<id>?format=toml`
 devuelve el diagrama en TOML.
 
-En [`examples/`](examples) hay tres ejemplos (`hello.json`, `three-tier.toml`,
-`k8s-platform.toml`), que también usan los tests E2E.
+En [`examples/`](examples) hay cuatro ejemplos (`hello.json`, en `sketch`; `three-tier.toml`,
+`k8s-platform.toml` y `event-driven.toml`, que usa los tipos genéricos y codos ajustados), que
+también usan los tests E2E.
 
 ## Uso del editor
 

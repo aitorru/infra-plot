@@ -1,11 +1,19 @@
 /** The editor shell: top bar, palette, properties panel, shortcuts, routing and persistence. */
-import { NODE_KINDS, nodeKinds, ZONE_KINDS, zoneKinds } from "../model/catalog";
+import {
+  NODE_GROUPS,
+  NODE_KINDS,
+  type NodeGroup,
+  nodeKinds,
+  ZONE_KINDS,
+  zoneKinds,
+} from "../model/catalog";
 import {
   type Doc,
   detectFormat,
   emptyDoc,
   type Format,
   type Issue,
+  type NodeKind,
   parseDocument,
   serialize,
 } from "../model/doc";
@@ -13,12 +21,13 @@ import { Canvas2D, isTyping } from "../render2d/canvas2d";
 import { Scene3D } from "../render3d/scene3d";
 import { deleteElement, duplicateElement } from "../state/ops";
 import { Store, type Tool, type View } from "../state/store";
-import { button, download, downloadBlob, h, slug } from "./dom";
+import { button, download, downloadBlob, h, select, slug } from "./dom";
 import { embeddedFontCss, svgToPng } from "./export";
 import { nodeIcon, zoneIcon } from "./icons";
 import { type Example, Library } from "./library";
 import { PropsPanel } from "./props";
 import { parseRoute, updateRoute } from "./route";
+import { setTheme, THEMES, type ThemeName, theme, themeNames } from "./theme";
 
 const AUTOSAVE_KEY = "infraplot:autosave";
 
@@ -28,6 +37,8 @@ function sameTool(a: Tool, b: Tool): boolean {
 
 export function mountApp(root: HTMLElement): void {
   const route = parseRoute();
+  // `?theme=` overrides the saved/system theme for this load only (screenshots, e2e).
+  setTheme(route.theme ?? theme().name, false);
   const store = new Store({
     view: route.view,
     animate: !matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -109,7 +120,7 @@ export function mountApp(root: HTMLElement): void {
   const standaloneSvg = async (): Promise<string> => {
     let css = "";
     try {
-      css = await embeddedFontCss();
+      css = await embeddedFontCss(store.doc.look);
     } catch (e) {
       toast(`Font not embedded: ${e}`, true);
     }
@@ -187,6 +198,14 @@ export function mountApp(root: HTMLElement): void {
     return [v, b];
   });
 
+  const themeSelect = select<ThemeName>(
+    theme().name,
+    themeNames().map((name) => [name, THEMES[name].label] as const),
+    (name) => setTheme(name, true),
+  );
+  themeSelect.dataset.testid = "theme-select";
+  themeSelect.title = "Theme";
+
   const topbar = h(
     "header",
     { class: "topbar" },
@@ -221,6 +240,7 @@ export function mountApp(root: HTMLElement): void {
       button("SVG", () => void exportSvg(), "Export SVG"),
       button("PNG", () => void exportPng(), "Export PNG (2× in 2D, 3× photo of the 3D view)"),
     ),
+    h("span", { class: "group" }, themeSelect),
     fileInput,
   );
 
@@ -234,6 +254,60 @@ export function mountApp(root: HTMLElement): void {
     toolButtons.push([tool, b]);
     return b;
   };
+
+  // Nodes are grouped by `NODE_GROUPS` (display order); a search box filters tiles by
+  // label or kind, since there are 40+ of them.
+  interface NodeEntry {
+    kind: NodeKind;
+    label: string;
+    btn: HTMLButtonElement;
+  }
+  interface NodeSection {
+    header: HTMLElement;
+    grid: HTMLElement;
+    entries: NodeEntry[];
+  }
+  const nodeSections: NodeSection[] = (Object.keys(NODE_GROUPS) as NodeGroup[])
+    .map((group) => {
+      const entries: NodeEntry[] = nodeKinds()
+        .filter((kind) => NODE_KINDS[kind].group === group)
+        .map((kind) => ({
+          kind,
+          label: NODE_KINDS[kind].label,
+          btn: toolButton(
+            { type: "node", kind },
+            NODE_KINDS[kind].label,
+            `Place ${NODE_KINDS[kind].label}`,
+            nodeIcon(kind),
+          ),
+        }));
+      return {
+        header: h("h3", {}, NODE_GROUPS[group]),
+        grid: h("div", { class: "grid" }, ...entries.map((e) => e.btn)),
+        entries,
+      };
+    })
+    .filter((section) => section.entries.length > 0);
+
+  const nodeSearch = h("input", {
+    type: "search",
+    placeholder: "Search nodes…",
+    "aria-label": "Search nodes",
+    "data-testid": "palette-search",
+  });
+  nodeSearch.addEventListener("input", () => {
+    const q = nodeSearch.value.trim().toLowerCase();
+    for (const section of nodeSections) {
+      let visible = 0;
+      for (const { kind, label, btn } of section.entries) {
+        const match = !q || label.toLowerCase().includes(q) || kind.toLowerCase().includes(q);
+        btn.hidden = !match;
+        if (match) visible++;
+      }
+      section.header.hidden = visible === 0;
+      section.grid.hidden = visible === 0;
+    }
+  });
 
   const palette = h(
     "aside",
@@ -262,18 +336,8 @@ export function mountApp(root: HTMLElement): void {
       ),
     ),
     h("h3", {}, "Nodes"),
-    h(
-      "div",
-      { class: "grid" },
-      ...nodeKinds().map((kind) =>
-        toolButton(
-          { type: "node", kind },
-          NODE_KINDS[kind].label,
-          `Place ${NODE_KINDS[kind].label}`,
-          nodeIcon(kind),
-        ),
-      ),
-    ),
+    nodeSearch,
+    ...nodeSections.flatMap((section) => [section.header, section.grid]),
   );
 
   // ------------------------------------------------------------ properties
@@ -422,8 +486,13 @@ export function mountApp(root: HTMLElement): void {
       if (result?.ok) store.load(result.doc, null);
     }
     store.set({});
-    // Load Kalam explicitly: the 3D labels are canvas textures, which don't request fonts.
-    await Promise.all([document.fonts.load("20px Kalam"), document.fonts.load("700 20px Kalam")]);
+    // Load both fonts explicitly: the 3D labels are canvas textures, which don't request fonts.
+    await Promise.all([
+      document.fonts.load("20px Kalam"),
+      document.fonts.load("700 20px Kalam"),
+      document.fonts.load("20px Inter Variable"),
+      document.fonts.load("700 20px Inter Variable"),
+    ]);
     await document.fonts.ready;
     canvas.invalidate();
     scene3d.invalidate();
