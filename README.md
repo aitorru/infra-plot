@@ -131,6 +131,7 @@ también usan los tests E2E.
 | --- | --- |
 | `/d/<id>` | Abre el diagrama `<id>` guardado en el servidor |
 | `?view=3d` | Arranca en la vista 3D |
+| `?theme=<tema>` | Fuerza un tema (`light`, `dark`, `solarized`, `nier`) sin guardarlo |
 | `?embed=1` | Solo el lienzo, sin barras ni paneles (para capturas o iframes); `#app[data-ready]` indica que ya está dibujado |
 | `?src=<url>` | Carga un JSON/TOML desde esa URL (sujeto a CORS) |
 
@@ -151,7 +152,28 @@ también usan los tests E2E.
 | `Esc` | Cancelar el borrador o deseleccionar |
 
 Los ficheros `.json`/`.toml` se importan con «Import…» o arrastrándolos a la ventana. Los
-exports SVG y PNG (2×) llevan la fuente Kalam incrustada, así que se ven igual sin conexión.
+exports SVG y PNG (2×) usan los colores del tema activo y llevan incrustada la fuente del look
+(Inter en `clean`, Kalam en `sketch`), así que se ven igual sin conexión.
+
+### Temas, look y colores
+
+- El selector de la barra superior cambia entre **Light**, **Dark**, **Solarized** y **NieR**;
+  se recuerda en el navegador y por defecto sigue al sistema. Afecta a paneles, lienzo 2D,
+  escena 3D y exports.
+- El **look** es del documento (panel de propiedades sin nada seleccionado): `clean` dibuja
+  iconos vectoriales en tiles tintados con Inter; `sketch`, el trazo a mano con rough.js y Kalam.
+- Cualquier elemento acepta un color propio: muestras predefinidas, selector libre y `↺` para
+  volver al del tipo.
+
+### Líneas en ángulo recto
+
+- Un edge con `route = "orthogonal"` seleccionado muestra un tirador en su tramo central:
+  arrastrarlo desplaza el codo (se guarda en `bend`). También se ajusta con el control «bend»
+  del panel de propiedades.
+- Las líneas libres seleccionadas muestran tiradores en cada vértice y en el centro de cada
+  tramo horizontal o vertical; arrastrar un tramo lo mueve en paralelo manteniendo los ángulos
+  rectos. Al dibujar, `Shift` fuerza tramos horizontales o verticales.
+- `Alt` desactiva el ajuste a la rejilla en todos los arrastres.
 Los ejemplos de `examples/` aparecen en «Open…».
 
 ### Vista 3D
@@ -160,11 +182,12 @@ Vista isométrica con three.js, generada desde el mismo documento que la 2D:
 
 - Cámara ortográfica isométrica. Arrastrar desplaza, botón derecho orbita (con límites),
   la rueda hace zoom; `Q`/`E` giran 90° y `F` encaja el diagrama.
-- Las zonas son losas apiladas según su anidamiento, con borde de tinta (sólido, discontinuo
+- Las zonas son losas biseladas apiladas según su anidamiento, con borde (sólido, discontinuo
   o punteado según su estilo) y la etiqueta impresa encima.
-- Cada tipo de nodo tiene su modelo low-poly (rack, cilindros de BBDD, heptágono de K8s,
-  nube…) con contorno a mano alzada. Las etiquetas usan Kalam.
-- Los edges son arcos (o tramos ortogonales) con flechas; los paquetes animados se activan
+- Cada tipo de nodo tiene su modelo: en `clean`, formas redondeadas con detalles (bahías,
+  puertos, LEDs, pantallas), contorno fino y sombras suaves; en `sketch`, sombreado toon con
+  contorno a mano alzada. Luces, fondo y etiquetas siguen el tema.
+- Los edges son arcos (o tramos ortogonales, con el mismo `bend` que en 2D) con flechas; los paquetes animados se activan
   o desactivan con `P` y arrancan apagados si el sistema pide movimiento reducido.
 - Clic selecciona; arrastrar un nodo o una zona lo mueve sobre el suelo (con su contenido y
   ajustado a la rejilla; `Alt` desactiva el ajuste). También se pueden colocar nodos y
