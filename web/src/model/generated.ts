@@ -133,7 +133,8 @@ export interface Edge {
   arrow?: "none" | "end" | "start" | "both";
   /**
    * Where the middle segment of an `orthogonal` route sits, as a fraction (0–1) of the
-   * way from `from` to `to`. Defaults to `0.5`, halfway.
+   * gap between the facing sides of `from` and `to` (or between their centres when they
+   * overlap along the main axis). Defaults to `0.5`, halfway.
    */
   bend?: number | null;
   color?: string | null;
