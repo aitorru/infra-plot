@@ -57,7 +57,7 @@ h = 260
 
 [[nodes]]                        # x, y = centro del icono
 id = "api"
-kind = "service"                 # 41 tipos, ver abajo
+kind = "service"                 # 42 tipos, ver abajo
 label = "API"
 x = 390
 y = 170
