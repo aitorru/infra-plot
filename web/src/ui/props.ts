@@ -1,9 +1,10 @@
 /** The properties panel: per-type fields for the selected element, or the diagram itself. */
-import { INK, NODE_KINDS, nodeKinds, ZONE_KINDS, zoneKinds } from "../model/catalog";
+import { NODE_KINDS, nodeKinds, ZONE_KINDS, zoneKinds } from "../model/catalog";
 import type {
   Arrow,
   Doc,
   Element,
+  Look,
   NodeKind,
   Route,
   StrokeStyle,
@@ -14,6 +15,7 @@ import { findElement } from "../model/doc";
 import { renameId } from "../state/ops";
 import type { State, Store } from "../state/store";
 import { button, h, select } from "./dom";
+import { theme } from "./theme";
 
 export interface PropsActions {
   toast(msg: string, error?: boolean): void;
@@ -42,11 +44,32 @@ const SIZES: readonly (readonly [TextSize, string])[] = [
   ["l", "Large"],
   ["xl", "Extra large"],
 ];
+const LOOKS: readonly (readonly [Look, string])[] = [
+  ["clean", "Clean"],
+  ["sketch", "Sketch"],
+];
+
+/** A coherent set of preset swatches, legible on both light and dark themes. */
+const PRESET_COLORS: readonly string[] = [
+  "#adb5bd",
+  "#fa5252",
+  "#ff922b",
+  "#ffd43b",
+  "#51cf66",
+  "#38d9a9",
+  "#339af0",
+  "#748ffc",
+  "#9775fa",
+  "#f783ac",
+];
+
+/** The default `bend` (middle-segment position) of an orthogonal edge, as a fraction 0–1. */
+const DEFAULT_BEND = 0.5;
 
 function defaultColor(found: Element): string {
   if (found.type === "node") return NODE_KINDS[found.el.kind].color;
   if (found.type === "zone") return ZONE_KINDS[found.el.kind ?? "generic"].color;
-  return INK;
+  return theme().ink;
 }
 
 function field(name: string, ...inputs: HTMLElement[]): HTMLElement {
@@ -139,6 +162,10 @@ export class PropsPanel {
           `${doc.lines.length} lines · ${doc.notes.length} notes`,
       ),
       field("description", desc),
+      field(
+        "look",
+        select<Look>(doc.look, LOOKS, (look) => this.#store.edit((d) => (d.look = look))),
+      ),
     );
   }
 
@@ -212,19 +239,21 @@ export class PropsPanel {
       }
       case "edge": {
         this.#labelField(id, found.el.label);
+        const route = found.el.route ?? "straight";
         this.el.append(
           h("p", { class: "stats" }, `${found.el.from} → ${found.el.to}`),
           this.#styleField(id, found.el.style),
           this.#arrowField(id, found.el.arrow ?? "end"),
           field(
             "route",
-            select<Route>(found.el.route ?? "straight", ROUTES, (route) =>
+            select<Route>(route, ROUTES, (route) =>
               this.#edit(id, (f) => {
                 if (f.type === "edge") f.el.route = route;
               }),
             ),
           ),
         );
+        if (route === "orthogonal") this.el.append(this.#bendField(id, found.el.bend));
         break;
       }
       case "line":
@@ -293,18 +322,73 @@ export class PropsPanel {
     );
   }
 
+  /** Position (0–100%) of the middle segment of an orthogonal edge's route. */
+  #bendField(id: string, value: number | null | undefined): HTMLElement {
+    const pct = (v: number): string => String(Math.round(v * 100));
+    const slider = h("input", {
+      type: "range",
+      name: "bend",
+      min: "0",
+      max: "100",
+      step: "1",
+      value: pct(value ?? DEFAULT_BEND),
+    });
+    const readout = h("span", { class: "bend-readout" }, `${slider.value}%`);
+    let checkpointed = false;
+    const startDrag = (): void => {
+      if (checkpointed) return;
+      checkpointed = true;
+      this.#store.checkpoint();
+    };
+    const endDrag = (): void => {
+      checkpointed = false;
+    };
+    slider.addEventListener("pointerdown", startDrag);
+    slider.addEventListener("focus", startDrag);
+    slider.addEventListener("pointerup", endDrag);
+    slider.addEventListener("blur", endDrag);
+    slider.addEventListener("input", () => {
+      readout.textContent = `${slider.value}%`;
+      this.#store.mutate((d) => {
+        const f = findElement(d, id);
+        if (f?.type === "edge") f.el.bend = Number(slider.value) / 100;
+      });
+    });
+    const reset = button(
+      "↺",
+      () => {
+        slider.value = pct(DEFAULT_BEND);
+        readout.textContent = `${slider.value}%`;
+        this.#edit(id, (f) => {
+          if (f.type === "edge") delete f.el.bend;
+        });
+      },
+      "Reset to the default bend",
+    );
+    reset.disabled = value == null;
+    return field("bend", h("span", { class: "row" }, slider, readout, reset));
+  }
+
   #colorField(found: Element): void {
     const id = found.el.id;
-    const color = h("input", {
-      type: "color",
-      name: "color",
-      value: found.el.color ?? defaultColor(found),
-    });
-    color.addEventListener("change", () =>
+    const current = (found.el.color ?? defaultColor(found)).toLowerCase();
+    const setColor = (value: string): void =>
       this.#edit(id, (f) => {
-        f.el.color = color.value;
+        f.el.color = value;
+      });
+    const swatches = h(
+      "span",
+      { class: "swatches" },
+      ...PRESET_COLORS.map((c) => {
+        const s = button("", () => setColor(c), `Colour ${c}`);
+        s.classList.add("swatch");
+        s.classList.toggle("active", c.toLowerCase() === current);
+        s.style.background = c;
+        return s;
       }),
     );
+    const color = h("input", { type: "color", name: "color", value: current });
+    color.addEventListener("change", () => setColor(color.value));
     const reset = button(
       "↺",
       () =>
@@ -314,7 +398,7 @@ export class PropsPanel {
       "Reset to the default colour",
     );
     reset.disabled = found.el.color == null;
-    this.el.append(field("color", h("span", { class: "row" }, color, reset)));
+    this.el.append(field("color", swatches, h("span", { class: "row" }, color, reset)));
   }
 
   #metaField(id: string, meta: Record<string, string>): void {

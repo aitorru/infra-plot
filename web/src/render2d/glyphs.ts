@@ -1,9 +1,11 @@
-/** Hand-drawn icons for every node kind, drawn with rough.js into a square box. */
+/** Hand-drawn icons for every node kind (the `sketch` look), drawn with rough.js into a box. */
 
 import type { Options } from "roughjs/bin/core";
 import type { RoughSVG } from "roughjs/bin/svg";
-import { FONT_FAMILY, INK } from "../model/catalog";
+import { FONT_FAMILY } from "../model/catalog";
 import type { NodeKind } from "../model/doc";
+import { theme } from "../ui/theme";
+import { CLEAN_ICONS, ICON_GRID, transformPath } from "./icons-clean";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -12,14 +14,21 @@ export function svgText(
   y: number,
   text: string,
   size: number,
-  opts: { anchor?: "start" | "middle" | "end"; color?: string; weight?: number } = {},
+  opts: {
+    anchor?: "start" | "middle" | "end";
+    color?: string;
+    weight?: number;
+    font?: string;
+    spacing?: number;
+  } = {},
 ): SVGTextElement {
   const t = document.createElementNS(SVG_NS, "text");
   t.setAttribute("x", String(x));
   t.setAttribute("y", String(y));
-  t.setAttribute("font-family", FONT_FAMILY);
+  t.setAttribute("font-family", opts.font ?? FONT_FAMILY);
   t.setAttribute("font-size", String(size));
-  t.setAttribute("fill", opts.color ?? INK);
+  t.setAttribute("fill", opts.color ?? theme().ink);
+  if (opts.spacing) t.setAttribute("letter-spacing", String(opts.spacing));
   t.setAttribute("text-anchor", opts.anchor ?? "middle");
   t.setAttribute("dominant-baseline", "central");
   if (opts.weight) t.setAttribute("font-weight", String(opts.weight));
@@ -47,11 +56,15 @@ export function drawGlyph(
   const line: Options = { ...base };
   delete line.fill;
   const u = s / 72; // designed on a 72px grid
+  const ink = (base.stroke as string | undefined) ?? theme().ink;
+  const paper = theme().panel;
+  const text = (x: number, y: number, t: string, size: number) =>
+    svgText(x, y, t, size, { weight: 700, color: ink });
 
   switch (kind) {
     case "service":
       add(rc.path(roundedRect(x0 + 4 * u, y0 + 10 * u, s - 8 * u, s - 20 * u, 12 * u), base));
-      add(svgText(cx, cy, "{ }", 22 * u, { weight: 700 }));
+      add(text(cx, cy, "{ }", 22 * u));
       break;
     case "server": {
       const w = 48 * u;
@@ -62,7 +75,7 @@ export function drawGlyph(
       }
       for (let i = 0; i < 4; i++) {
         const y = y0 + 2 * u + ((i + 0.5) * (s - 4 * u)) / 4;
-        add(rc.circle(cx + w / 2 - 9 * u, y, 5 * u, { ...base, fill: INK, fillStyle: "solid" }));
+        add(rc.circle(cx + w / 2 - 9 * u, y, 5 * u, { ...base, fill: ink, fillStyle: "solid" }));
         add(rc.line(cx - w / 2 + 7 * u, y, cx + 4 * u, y, line));
       }
       break;
@@ -79,11 +92,11 @@ export function drawGlyph(
       add(rc.line(cx, y0 + s - 14 * u, cx, y0 + s - 6 * u, line));
       break;
     case "container":
-      add(isoCube(rc, cx, cy + 4 * u, 30 * u, base));
+      add(isoCube(rc, cx, cy + 4 * u, 30 * u, base, paper));
       break;
     case "pod":
       add(rc.polygon(hexagon(cx, cy, h - 2 * u), base));
-      add(isoCube(rc, cx, cy + 3 * u, 14 * u, { ...base, fill: "#ffffff" }));
+      add(isoCube(rc, cx, cy + 3 * u, 14 * u, { ...base, fill: paper }, paper));
       break;
     case "k8s": {
       add(rc.polygon(ngon(cx, cy, h - 2 * u, 7), base));
@@ -92,7 +105,7 @@ export function drawGlyph(
         const a = (i / 7) * Math.PI * 2 - Math.PI / 2;
         add(rc.line(cx, cy, cx + Math.cos(a) * 20 * u, cy + Math.sin(a) * 20 * u, line));
       }
-      add(rc.circle(cx, cy, 8 * u, { ...base, fill: INK, fillStyle: "solid" }));
+      add(rc.circle(cx, cy, 8 * u, { ...base, fill: ink, fillStyle: "solid" }));
       break;
     }
     case "proxy":
@@ -196,12 +209,12 @@ export function drawGlyph(
           base,
         ),
       );
-      add(rc.ellipse(cx, top, s - 16 * u, 14 * u, { ...base, fill: "#ffffff" }));
+      add(rc.ellipse(cx, top, s - 16 * u, 14 * u, { ...base, fill: paper }));
       break;
     }
     case "function":
       add(rc.circle(cx, cy, s - 8 * u, base));
-      add(svgText(cx, cy + 2 * u, "λ", 36 * u, { weight: 700 }));
+      add(text(cx, cy + 2 * u, "λ", 36 * u));
       break;
     case "firewall": {
       const top = y0 + 8 * u;
@@ -239,7 +252,7 @@ export function drawGlyph(
       break;
     case "dns":
       add(rc.path(roundedRect(x0 + 2 * u, y0 + 18 * u, s - 4 * u, s - 36 * u, 8 * u), base));
-      add(svgText(cx, cy, "DNS", 18 * u, { weight: 700 }));
+      add(text(cx, cy, "DNS", 18 * u));
       break;
     case "user":
       add(rc.circle(cx, y0 + 20 * u, 26 * u, base));
@@ -275,11 +288,41 @@ export function drawGlyph(
       add(rc.line(cx, y0 + s - 18 * u, cx, y0 + s - 6 * u, line));
       add(rc.line(cx - 14 * u, y0 + s - 6 * u, cx + 14 * u, y0 + s - 6 * u, line));
       break;
+    default:
+      // Newer kinds: the clean icon's outline, sketched at full size.
+      sketchIcon(rc, kind, cx, cy, s, base, line, ink).forEach(add);
   }
   return g;
 }
 
-function isoCube(rc: RoughSVG, cx: number, cy: number, r: number, o: Options): SVGGElement {
+function sketchIcon(
+  rc: RoughSVG,
+  kind: NodeKind,
+  cx: number,
+  cy: number,
+  s: number,
+  base: Options,
+  line: Options,
+  ink: string,
+): SVGElement[] {
+  const k = s / ICON_GRID;
+  return CLEAN_ICONS[kind].map((part) => {
+    const d = transformPath(part.d, k, cx - s / 2, cy - s / 2);
+    const dash = part.dash ? { strokeLineDash: part.dash.map((v) => v * k) } : {};
+    if (part.kind === "body") return rc.path(d, { ...base, ...dash });
+    if (part.kind === "solid") return rc.path(d, { ...base, fill: ink, fillStyle: "solid" });
+    return rc.path(d, { ...line, ...dash });
+  });
+}
+
+function isoCube(
+  rc: RoughSVG,
+  cx: number,
+  cy: number,
+  r: number,
+  o: Options,
+  paper: string,
+): SVGGElement {
   const g = document.createElementNS(SVG_NS, "g");
   const dx = r * Math.cos(Math.PI / 6);
   const dy = r / 2;
@@ -303,7 +346,7 @@ function isoCube(rc: RoughSVG, cx: number, cy: number, r: number, o: Options): S
   ];
   g.appendChild(rc.polygon(left, o));
   g.appendChild(rc.polygon(right, { ...o, fillStyle: "cross-hatch" }));
-  g.appendChild(rc.polygon(top, { ...o, fill: "#ffffff", fillStyle: "solid" }));
+  g.appendChild(rc.polygon(top, { ...o, fill: paper, fillStyle: "solid" }));
   return g;
 }
 

@@ -1,5 +1,7 @@
-/** URL state: `/d/:id`, `?view=3d`, `?embed=1`, `?src=<url>`. */
+/** URL state: `/d/:id`, `?view=3d`, `?embed=1`, `?src=<url>`, `?theme=<name>`. */
+
 import type { View } from "../state/store";
+import { type ThemeName, themeNames } from "./theme";
 
 export interface Route {
   /** Server id from `/d/:id`. */
@@ -9,16 +11,20 @@ export interface Route {
   embed: boolean;
   /** Load the diagram from this URL (JSON or TOML) instead of the server. */
   src: string | null;
+  /** Overrides the saved/system theme for this load only (screenshots, e2e); not persisted. */
+  theme: ThemeName | null;
 }
 
 export function parseRoute(loc: Location = location): Route {
   const params = new URLSearchParams(loc.search);
   const embed = params.get("embed");
+  const theme = params.get("theme");
   return {
     docId: /^\/d\/([^/]+)\/?$/.exec(loc.pathname)?.[1] ?? null,
     view: params.get("view") === "3d" ? "3d" : "2d",
     embed: embed !== null && embed !== "0" && embed !== "false",
     src: params.get("src"),
+    theme: theme && (themeNames() as string[]).includes(theme) ? (theme as ThemeName) : null,
   };
 }
 

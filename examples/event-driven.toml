@@ -1,0 +1,268 @@
+version = 1
+title = "Event-driven platform"
+description = "Clients behind a CDN and an API gateway; services publish to a stream consumed by workers."
+
+[[zones]]
+id = "account"
+kind = "account"
+label = "prod account"
+x = 240
+y = 0
+w = 1000
+h = 640
+
+[[zones]]
+id = "az"
+kind = "availability-zone"
+label = "eu-west-1a"
+x = 460
+y = 60
+w = 560
+h = 360
+
+[[zones]]
+id = "sg"
+kind = "security-group"
+label = "app-sg"
+x = 480
+y = 120
+w = 520
+h = 280
+
+[[zones]]
+id = "ops"
+kind = "generic"
+label = "platform"
+x = 260
+y = 460
+w = 960
+h = 160
+
+[[nodes]]
+id = "browser"
+kind = "browser"
+label = "Web"
+x = 80
+y = 100
+
+[[nodes]]
+id = "mobile"
+kind = "mobile"
+label = "iOS / Android"
+x = 80
+y = 260
+
+[[nodes]]
+id = "cdn"
+kind = "cdn"
+label = "CDN"
+x = 340
+y = 100
+
+[[nodes]]
+id = "gw"
+kind = "api-gateway"
+label = "API gateway"
+x = 340
+y = 260
+
+[[nodes]]
+id = "idp"
+kind = "identity"
+label = "OIDC"
+x = 340
+y = 380
+
+[[nodes]]
+id = "orders"
+kind = "service"
+label = "orders"
+x = 560
+y = 200
+meta = { replicas = "3" }
+
+[[nodes]]
+id = "stream"
+kind = "stream"
+label = "events"
+x = 740
+y = 200
+
+[[nodes]]
+id = "worker"
+kind = "worker"
+label = "fulfilment"
+x = 920
+y = 200
+
+[[nodes]]
+id = "cron"
+kind = "scheduler"
+label = "nightly"
+x = 740
+y = 340
+
+[[nodes]]
+id = "bucket"
+kind = "bucket"
+label = "assets"
+x = 1140
+y = 100
+
+[[nodes]]
+id = "dwh"
+kind = "warehouse"
+label = "analytics"
+x = 1140
+y = 260
+
+[[nodes]]
+id = "search"
+kind = "search"
+label = "search"
+x = 560
+y = 340
+
+[[nodes]]
+id = "mail"
+kind = "notification"
+label = "emails"
+x = 1140
+y = 400
+
+[[nodes]]
+id = "psp"
+kind = "external"
+label = "payments"
+x = 920
+y = -120
+
+[[nodes]]
+id = "ci"
+kind = "ci-cd"
+label = "CI/CD"
+x = 340
+y = 560
+
+[[nodes]]
+id = "registry"
+kind = "registry"
+label = "registry"
+x = 540
+y = 560
+
+[[nodes]]
+id = "secrets"
+kind = "secrets"
+label = "vault"
+x = 740
+y = 560
+
+[[nodes]]
+id = "logs"
+kind = "logging"
+label = "logs"
+x = 940
+y = 560
+
+[[nodes]]
+id = "metrics"
+kind = "monitoring"
+label = "metrics"
+x = 1120
+y = 560
+
+[[edges]]
+id = "e-browser-cdn"
+from = "browser"
+to = "cdn"
+label = "HTTPS"
+
+[[edges]]
+id = "e-mobile-gw"
+from = "mobile"
+to = "gw"
+label = "HTTPS"
+
+[[edges]]
+id = "e-cdn-gw"
+from = "cdn"
+to = "gw"
+label = "/api"
+
+[[edges]]
+id = "e-gw-idp"
+from = "gw"
+to = "idp"
+style = "dashed"
+
+[[edges]]
+id = "e-gw-orders"
+from = "gw"
+to = "orders"
+route = "orthogonal"
+bend = 0.3
+
+[[edges]]
+id = "e-orders-stream"
+from = "orders"
+to = "stream"
+label = "publish"
+
+[[edges]]
+id = "e-stream-worker"
+from = "stream"
+to = "worker"
+label = "consume"
+
+[[edges]]
+id = "e-cron-stream"
+from = "cron"
+to = "stream"
+style = "dotted"
+
+[[edges]]
+id = "e-orders-search"
+from = "orders"
+to = "search"
+style = "dashed"
+
+[[edges]]
+id = "e-worker-bucket"
+from = "worker"
+to = "bucket"
+route = "orthogonal"
+bend = 0.6
+
+[[edges]]
+id = "e-worker-dwh"
+from = "worker"
+to = "dwh"
+route = "orthogonal"
+
+[[edges]]
+id = "e-worker-mail"
+from = "worker"
+to = "mail"
+route = "orthogonal"
+bend = 0.6
+
+[[edges]]
+id = "e-worker-psp"
+from = "worker"
+to = "psp"
+label = "charge"
+color = "#e8590c"
+
+[[edges]]
+id = "e-ci-registry"
+from = "ci"
+to = "registry"
+label = "push"
+
+[[notes]]
+id = "note"
+x = 20
+y = 440
+text = "Every service ships logs\nand metrics to the platform."
+size = "s"

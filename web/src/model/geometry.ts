@@ -69,6 +69,60 @@ export function clipToBox(b: Box, p: Point, pad = 6): Point {
   return [cx + dx * t, cy + dy * t];
 }
 
+/**
+ * How an orthogonal edge is laid out: the main axis it travels along, and the span (`lo` → `hi`,
+ * in that axis' coordinate) over which `bend` slides the middle segment. When the boxes are
+ * apart along the main axis the span is the gap between their facing sides, so the first and
+ * last segments leave and enter the boxes perpendicular to their borders; otherwise it runs
+ * between the centres.
+ */
+export interface OrthoLayout {
+  axis: "x" | "y";
+  lo: number;
+  hi: number;
+  /** Centres of the `from` and `to` boxes. */
+  a: Point;
+  b: Point;
+  /** Whether the boxes are apart along the axis (`lo`/`hi` are then on their borders). */
+  apart: boolean;
+}
+
+const EDGE_PAD = 6;
+
+export function orthoLayout(from: Box, to: Box): OrthoLayout {
+  const a = center(from);
+  const b = center(to);
+  const gapX = Math.max(to.x - (from.x + from.w), from.x - (to.x + to.w));
+  const gapY = Math.max(to.y - (from.y + from.h), from.y - (to.y + to.h));
+  let axis: "x" | "y";
+  if (gapX > 0 && gapY <= 0) axis = "x";
+  else if (gapY > 0 && gapX <= 0) axis = "y";
+  else axis = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]) ? "x" : "y";
+  const i = axis === "x" ? 0 : 1;
+  const gap = axis === "x" ? gapX : gapY;
+  if (gap > EDGE_PAD * 2) {
+    const dir = Math.sign(b[i] - a[i]) || 1;
+    const halfA = (axis === "x" ? from.w : from.h) / 2 + EDGE_PAD;
+    const halfB = (axis === "x" ? to.w : to.h) / 2 + EDGE_PAD;
+    return { axis, lo: a[i] + dir * halfA, hi: b[i] - dir * halfB, a, b, apart: true };
+  }
+  return { axis, lo: a[i], hi: b[i], a, b, apart: false };
+}
+
+/** Clamps a bend fraction to 0..1, defaulting to the middle. */
+export function bendOf(e: Pick<Edge, "bend">): number {
+  const v = e.bend ?? 0.5;
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5;
+}
+
+/** The bend fraction that puts the middle segment at `coord` (along the layout's axis). */
+export function bendAt(layout: OrthoLayout, coord: number): number {
+  const span = layout.hi - layout.lo;
+  if (span === 0) return 0.5;
+  const t = Math.min(1, Math.max(0, (coord - layout.lo) / span));
+  return Math.round(t * 10000) / 10000;
+}
+
 /** The polyline an edge follows, already clipped to its endpoints' borders. */
 export function edgePath(doc: Doc, e: Edge): Point[] | undefined {
   const a = targetBox(doc, e.from);
@@ -79,18 +133,75 @@ export function edgePath(doc: Doc, e: Edge): Point[] | undefined {
   if (e.route !== "orthogonal") {
     return [clipToBox(a, cb), clipToBox(b, ca)];
   }
-  const horizontal = Math.abs(cb[0] - ca[0]) >= Math.abs(cb[1] - ca[1]);
-  const mid: Point[] = horizontal
-    ? [
-        [(ca[0] + cb[0]) / 2, ca[1]],
-        [(ca[0] + cb[0]) / 2, cb[1]],
-      ]
-    : [
-        [ca[0], (ca[1] + cb[1]) / 2],
-        [cb[0], (ca[1] + cb[1]) / 2],
-      ];
-  const [m0, m1] = mid as [Point, Point];
-  return [clipToBox(a, m0), m0, m1, clipToBox(b, m1)];
+  const l = orthoLayout(a, b);
+  const m = l.lo + (l.hi - l.lo) * bendOf(e);
+  const [m0, m1]: [Point, Point] =
+    l.axis === "x"
+      ? [
+          [m, ca[1]],
+          [m, cb[1]],
+        ]
+      : [
+          [ca[0], m],
+          [cb[0], m],
+        ];
+  if (l.apart) {
+    const start: Point = l.axis === "x" ? [l.lo, ca[1]] : [ca[0], l.lo];
+    const end: Point = l.axis === "x" ? [l.hi, cb[1]] : [cb[0], l.hi];
+    return simplify([start, m0, m1, end]);
+  }
+  return simplify([clipToBox(a, m0, EDGE_PAD), m0, m1, clipToBox(b, m1, EDGE_PAD)]);
+}
+
+/** The middle (bendable) segment of an orthogonal edge, if it has one. */
+export function bendSegment(
+  doc: Doc,
+  e: Edge,
+): { p: Point; q: Point; layout: OrthoLayout } | undefined {
+  if (e.route !== "orthogonal") return undefined;
+  const a = targetBox(doc, e.from);
+  const b = targetBox(doc, e.to);
+  if (!a || !b) return undefined;
+  const layout = orthoLayout(a, b);
+  const m = layout.lo + (layout.hi - layout.lo) * bendOf(e);
+  const j = layout.axis === "x" ? 1 : 0;
+  const p: Point = layout.axis === "x" ? [m, layout.a[j]] : [layout.a[j], m];
+  const q: Point = layout.axis === "x" ? [m, layout.b[j]] : [layout.b[j], m];
+  return { p, q, layout };
+}
+
+/** Drops repeated points and middle points of straight runs. */
+export function simplify(pts: readonly Point[]): Point[] {
+  const out: Point[] = [];
+  for (const p of pts) {
+    const last = out[out.length - 1];
+    if (last && Math.abs(last[0] - p[0]) < 1e-6 && Math.abs(last[1] - p[1]) < 1e-6) continue;
+    const prev = out[out.length - 2];
+    if (prev && last) {
+      const cross = (last[0] - prev[0]) * (p[1] - prev[1]) - (last[1] - prev[1]) * (p[0] - prev[0]);
+      const dot = (last[0] - prev[0]) * (p[0] - last[0]) + (last[1] - prev[1]) * (p[1] - last[1]);
+      if (Math.abs(cross) < 1e-6 && dot >= 0) out.pop();
+    }
+    out.push(p);
+  }
+  return out;
+}
+
+/** Whether segment p→q is horizontal (`h`), vertical (`v`) or neither. */
+export function segmentAxis(p: Point, q: Point): "h" | "v" | null {
+  if (p[0] === q[0] && p[1] === q[1]) return null;
+  if (p[1] === q[1]) return "h";
+  if (p[0] === q[0]) return "v";
+  return null;
+}
+
+/** `p` pulled onto the horizontal or vertical through `from`, whichever is closer. */
+export function constrainOrtho(from: Point, p: Point): Point {
+  return Math.abs(p[0] - from[0]) >= Math.abs(p[1] - from[1]) ? [p[0], from[1]] : [from[0], p[1]];
+}
+
+export function midpoint(p: Point, q: Point): Point {
+  return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
 }
 
 export function pathLength(pts: readonly Point[]): number {

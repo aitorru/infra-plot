@@ -5,26 +5,48 @@
  * via the `definition` "NodeKind".
  */
 export type NodeKind =
+  | "component"
   | "service"
   | "server"
   | "vm"
   | "container"
   | "pod"
   | "k8s"
+  | "function"
+  | "worker"
+  | "scheduler"
+  | "gpu"
   | "proxy"
   | "load-balancer"
   | "api-gateway"
+  | "gateway"
+  | "router"
+  | "switch"
+  | "vpn"
+  | "cdn"
+  | "dns"
   | "database"
   | "cache"
   | "queue"
+  | "stream"
   | "storage"
-  | "function"
+  | "bucket"
+  | "warehouse"
+  | "search"
   | "firewall"
-  | "cdn"
-  | "dns"
+  | "identity"
+  | "secrets"
+  | "monitoring"
+  | "logging"
+  | "ci-cd"
+  | "registry"
+  | "notification"
   | "user"
+  | "client"
+  | "mobile"
+  | "browser"
   | "internet"
-  | "monitoring";
+  | "external";
 /**
  * This interface was referenced by `Diagram`'s JSON-Schema
  * via the `definition` "StrokeStyle".
@@ -35,6 +57,11 @@ export type StrokeStyle = "solid" | "dashed" | "dotted";
  * via the `definition` "Arrow".
  */
 export type Arrow = "none" | "end" | "start" | "both";
+/**
+ * This interface was referenced by `Diagram`'s JSON-Schema
+ * via the `definition` "Look".
+ */
+export type Look = "clean" | "sketch";
 /**
  * This interface was referenced by `Diagram`'s JSON-Schema
  * via the `definition` "Route".
@@ -49,7 +76,19 @@ export type TextSize = "s" | "m" | "l" | "xl";
  * This interface was referenced by `Diagram`'s JSON-Schema
  * via the `definition` "ZoneKind".
  */
-export type ZoneKind = "generic" | "region" | "vpc" | "subnet" | "dmz" | "k8s-cluster" | "namespace" | "on-prem";
+export type ZoneKind =
+  | "generic"
+  | "region"
+  | "vpc"
+  | "subnet"
+  | "dmz"
+  | "availability-zone"
+  | "account"
+  | "security-group"
+  | "k8s-cluster"
+  | "namespace"
+  | "on-prem"
+  | "data-center";
 
 /**
  * An infrastructure diagram.
@@ -64,6 +103,10 @@ export interface Diagram {
    * Free-form polylines.
    */
   lines?: Line[];
+  /**
+   * How the diagram is drawn: crisp vector shapes (`clean`) or hand-drawn (`sketch`).
+   */
+  look?: "clean" | "sketch";
   /**
    * Infrastructure components.
    */
@@ -88,6 +131,12 @@ export interface Diagram {
  */
 export interface Edge {
   arrow?: "none" | "end" | "start" | "both";
+  /**
+   * Where the middle segment of an `orthogonal` route sits, as a fraction (0–1) of the
+   * gap between the facing sides of `from` and `to` (or between their centres when they
+   * overlap along the main axis). Defaults to `0.5`, halfway.
+   */
+  bend?: number | null;
   color?: string | null;
   /**
    * Id of a node or zone.
@@ -166,7 +215,19 @@ export interface Zone {
   color?: string | null;
   h: number;
   id: string;
-  kind?: "generic" | "region" | "vpc" | "subnet" | "dmz" | "k8s-cluster" | "namespace" | "on-prem";
+  kind?:
+    | "generic"
+    | "region"
+    | "vpc"
+    | "subnet"
+    | "dmz"
+    | "availability-zone"
+    | "account"
+    | "security-group"
+    | "k8s-cluster"
+    | "namespace"
+    | "on-prem"
+    | "data-center";
   label?: string;
   /**
    * Border style. Defaults to the style of `kind`.

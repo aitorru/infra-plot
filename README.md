@@ -1,11 +1,15 @@
 # infra-plot
 
-Editor web de diagramas de infraestructura: vista 2D estilo sketch y vista 3D isométrica,
-reproducibles desde JSON/TOML.
+Editor web de diagramas de infraestructura: vista 2D (limpia o a mano alzada) y vista 3D
+isométrica, reproducibles desde JSON/TOML. Temas claro, oscuro, Solarized y NieR.
 
-![Editor 2D con el ejemplo three-tier](docs/screenshots/editor-2d.png)
+![Editor 2D con el ejemplo event-driven, tema claro y look clean](docs/screenshots/editor-2d.png)
 
 ![Vista 3D isométrica del ejemplo k8s-platform](docs/screenshots/view-3d.png)
+
+| Tema oscuro | NieR, look sketch | Vista 3D en Solarized |
+| --- | --- | --- |
+| ![Editor 2D en tema oscuro](docs/screenshots/editor-2d-dark.png) | ![Look sketch con el tema NieR](docs/screenshots/editor-2d-nier.png) | ![Vista 3D con el tema Solarized](docs/screenshots/view-3d-solarized.png) |
 
 ## Desarrollo
 
@@ -42,10 +46,12 @@ rejilla de 20.
 version = 1                      # obligatorio, siempre 1
 title = "Hello infra-plot"       # obligatorio
 description = "Opcional"
+look = "clean"                   # clean (por defecto, vectorial) · sketch (a mano alzada)
 
 [[zones]]                        # rectángulos: x, y = esquina superior izquierda
 id = "vpc"
-kind = "vpc"                     # generic · region · vpc · subnet · dmz · k8s-cluster · namespace · on-prem
+kind = "vpc"                     # generic · region · vpc · subnet · dmz · availability-zone · account
+                                 # security-group · k8s-cluster · namespace · on-prem · data-center
 label = "VPC"
 x = 120
 y = 40
@@ -55,7 +61,7 @@ h = 260
 
 [[nodes]]                        # x, y = centro del icono
 id = "api"
-kind = "service"                 # 20 tipos, ver abajo
+kind = "service"                 # 42 tipos, ver abajo
 label = "API"
 x = 390
 y = 170
@@ -74,7 +80,9 @@ to = "db"
 label = "SQL"
 style = "dashed"                 # solid (por defecto) · dashed · dotted
 arrow = "end"                    # end (por defecto) · start · both · none
-route = "straight"               # straight (por defecto) · orthogonal
+route = "orthogonal"             # straight (por defecto) · orthogonal
+bend = 0.3                       # solo orthogonal: dónde cae el tramo central, de 0 (from) a 1 (to);
+                                 # por defecto 0.5
 
 [[lines]]                        # trazos libres, sin anclar a nada
 id = "l1"
@@ -89,9 +97,17 @@ text = "hello!"
 size = "m"                       # s · m (por defecto) · l · xl
 ```
 
-Tipos de nodo: `service`, `server`, `vm`, `container`, `pod`, `k8s`, `function`, `proxy`,
-`load-balancer`, `api-gateway`, `firewall`, `cdn`, `dns`, `database`, `cache`, `queue`,
-`storage`, `user`, `internet`, `monitoring`.
+Tipos de nodo, por grupos (así aparecen en la paleta):
+
+| Grupo | Tipos |
+| --- | --- |
+| Genérico | `component` |
+| Cómputo | `service`, `server`, `vm`, `container`, `pod`, `k8s`, `function`, `worker`, `scheduler`, `gpu` |
+| Red | `proxy`, `load-balancer`, `api-gateway`, `gateway`, `router`, `switch`, `vpn`, `cdn`, `dns` |
+| Datos | `database`, `cache`, `queue`, `stream`, `storage`, `bucket`, `warehouse`, `search` |
+| Seguridad | `firewall`, `identity`, `secrets` |
+| Operación | `monitoring`, `logging`, `ci-cd`, `registry`, `notification` |
+| Clientes | `user`, `client`, `mobile`, `browser`, `internet`, `external` |
 
 Todos los elementos aceptan `color` (`#rgb` o `#rrggbb`); sin él se usa el del tipo. Además del
 esquema, se comprueba que:
@@ -99,15 +115,17 @@ esquema, se comprueba que:
 - los `id` son únicos en todo el documento;
 - los `from`/`to` de los edges existen y no apuntan al mismo elemento;
 - las zonas tienen ancho y alto positivos, las líneas al menos dos puntos y todas las
-  coordenadas son números finitos.
+  coordenadas son números finitos;
+- `bend` está entre 0 y 1.
 
 El editor valida al importar o abrir, y el servidor al guardar: `PUT /api/diagrams/<id>`
 (JSON, o TOML con `Content-Type: application/toml`) responde `422` con la lista de
 problemas, y `POST /api/validate` solo valida. `GET /api/diagrams/<id>?format=toml`
 devuelve el diagrama en TOML.
 
-En [`examples/`](examples) hay tres ejemplos (`hello.json`, `three-tier.toml`,
-`k8s-platform.toml`), que también usan los tests E2E.
+En [`examples/`](examples) hay cuatro ejemplos (`hello.json`, en `sketch`; `three-tier.toml`,
+`k8s-platform.toml` y `event-driven.toml`, que usa los tipos genéricos y codos ajustados), que
+también usan los tests E2E.
 
 ## Uso del editor
 
@@ -117,6 +135,7 @@ En [`examples/`](examples) hay tres ejemplos (`hello.json`, `three-tier.toml`,
 | --- | --- |
 | `/d/<id>` | Abre el diagrama `<id>` guardado en el servidor |
 | `?view=3d` | Arranca en la vista 3D |
+| `?theme=<tema>` | Fuerza un tema (`light`, `dark`, `solarized`, `nier`) sin guardarlo |
 | `?embed=1` | Solo el lienzo, sin barras ni paneles (para capturas o iframes); `#app[data-ready]` indica que ya está dibujado |
 | `?src=<url>` | Carga un JSON/TOML desde esa URL (sujeto a CORS) |
 
@@ -137,7 +156,28 @@ En [`examples/`](examples) hay tres ejemplos (`hello.json`, `three-tier.toml`,
 | `Esc` | Cancelar el borrador o deseleccionar |
 
 Los ficheros `.json`/`.toml` se importan con «Import…» o arrastrándolos a la ventana. Los
-exports SVG y PNG (2×) llevan la fuente Kalam incrustada, así que se ven igual sin conexión.
+exports SVG y PNG (2×) usan los colores del tema activo y llevan incrustada la fuente del look
+(Inter en `clean`, Kalam en `sketch`), así que se ven igual sin conexión.
+
+### Temas, look y colores
+
+- El selector de la barra superior cambia entre **Light**, **Dark**, **Solarized** y **NieR**;
+  se recuerda en el navegador y por defecto sigue al sistema. Afecta a paneles, lienzo 2D,
+  escena 3D y exports.
+- El **look** es del documento (panel de propiedades sin nada seleccionado): `clean` dibuja
+  iconos vectoriales en tiles tintados con Inter; `sketch`, el trazo a mano con rough.js y Kalam.
+- Cualquier elemento acepta un color propio: muestras predefinidas, selector libre y `↺` para
+  volver al del tipo.
+
+### Líneas en ángulo recto
+
+- Un edge con `route = "orthogonal"` seleccionado muestra un tirador en su tramo central:
+  arrastrarlo desplaza el codo (se guarda en `bend`). También se ajusta con el control «bend»
+  del panel de propiedades.
+- Las líneas libres seleccionadas muestran tiradores en cada vértice y en el centro de cada
+  tramo horizontal o vertical; arrastrar un tramo lo mueve en paralelo manteniendo los ángulos
+  rectos. Al dibujar, `Shift` fuerza tramos horizontales o verticales.
+- `Alt` desactiva el ajuste a la rejilla en todos los arrastres.
 Los ejemplos de `examples/` aparecen en «Open…».
 
 ### Vista 3D
@@ -146,11 +186,12 @@ Vista isométrica con three.js, generada desde el mismo documento que la 2D:
 
 - Cámara ortográfica isométrica. Arrastrar desplaza, botón derecho orbita (con límites),
   la rueda hace zoom; `Q`/`E` giran 90° y `F` encaja el diagrama.
-- Las zonas son losas apiladas según su anidamiento, con borde de tinta (sólido, discontinuo
+- Las zonas son losas biseladas apiladas según su anidamiento, con borde (sólido, discontinuo
   o punteado según su estilo) y la etiqueta impresa encima.
-- Cada tipo de nodo tiene su modelo low-poly (rack, cilindros de BBDD, heptágono de K8s,
-  nube…) con contorno a mano alzada. Las etiquetas usan Kalam.
-- Los edges son arcos (o tramos ortogonales) con flechas; los paquetes animados se activan
+- Cada tipo de nodo tiene su modelo: en `clean`, formas redondeadas con detalles (bahías,
+  puertos, LEDs, pantallas), contorno fino y sombras suaves; en `sketch`, sombreado toon con
+  contorno a mano alzada. Luces, fondo y etiquetas siguen el tema.
+- Los edges son arcos (o tramos ortogonales, con el mismo `bend` que en 2D) con flechas; los paquetes animados se activan
   o desactivan con `P` y arrancan apagados si el sistema pide movimiento reducido.
 - Clic selecciona; arrastrar un nodo o una zona lo mueve sobre el suelo (con su contenido y
   ajustado a la rejilla; `Alt` desactiva el ajuste). También se pueden colocar nodos y

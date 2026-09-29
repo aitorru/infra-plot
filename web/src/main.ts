@@ -1,5 +1,6 @@
 import "@fontsource/kalam/400.css";
 import "@fontsource/kalam/700.css";
+import "@fontsource-variable/inter";
 import "./ui/style.css";
 import { mountApp } from "./ui/app";
 

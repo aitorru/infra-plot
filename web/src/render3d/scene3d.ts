@@ -1,10 +1,14 @@
-/** The isometric 3D view: a three.js scene rebuilt from the document, sketch-styled. */
+/**
+ * The isometric 3D view: a three.js scene rebuilt from the document, in the document's look
+ * (`clean` or `sketch`) and the current colour theme.
+ */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { ACCENT, GRID, INK, NODE_KINDS, NODE_SIZE, TEXT_SIZES, ZONE_KINDS } from "../model/catalog";
-import type { Arrow, Doc, Edge, Line, Node, Note, StrokeStyle, Zone } from "../model/doc";
+import { fontFamily, GRID, NODE_KINDS, NODE_SIZE, TEXT_SIZES, ZONE_KINDS } from "../model/catalog";
+import type { Arrow, Doc, Edge, Line, Look, Node, Note, StrokeStyle, Zone } from "../model/doc";
 import { findElement } from "../model/doc";
 import {
   type Box,
@@ -20,8 +24,10 @@ import {
 } from "../model/geometry";
 import { addEdge, addNode, moveElement, zoneContents } from "../state/ops";
 import type { Store } from "../state/store";
+import { mix, onThemeChange, surface, type Theme, theme } from "../ui/theme";
 import { flatLabel, labelSprite } from "./labels";
-import { creases, darker, dashPattern, ink, nodeModel, rng, toon } from "./models";
+import { creases, dashPattern, ink, nodeModel, rng } from "./models";
+import { darker, outlineResolution, solid } from "./style";
 
 /** Thickness of a zone slab; nested zones stack one slab per level. */
 const SLAB = 12;
@@ -29,7 +35,6 @@ const SLAB = 12;
 const ISO_POLAR = Math.acos(1 / Math.sqrt(3));
 const QUARTER = Math.PI / 2;
 const CAMERA_DISTANCE = 8000;
-const PAPER = "#fdfcf8";
 const PACKET_SPEED = 120; // world units per second
 const MAX_EXPORT_SIZE = 4096;
 
@@ -84,21 +89,21 @@ function makeRenderer(preserveDrawingBuffer = false): THREE.WebGLRenderer {
   // Shadows only change with the scene, not the camera; `#collect` asks for updates.
   r.shadowMap.autoUpdate = false;
   r.shadowMap.needsUpdate = true;
-  r.setClearColor(PAPER);
+  r.setClearColor(theme().paper);
   return r;
 }
 
 /** A paper-coloured ground with the same dotted grid as the 2D canvas. */
-function paperTexture(): THREE.CanvasTexture {
+function paperTexture(th: Theme): THREE.CanvasTexture {
   const c = document.createElement("canvas");
   c.width = c.height = 64;
   const ctx = c.getContext("2d");
   if (ctx) {
-    ctx.fillStyle = PAPER;
+    ctx.fillStyle = th.paper;
     ctx.fillRect(0, 0, 64, 64);
-    ctx.fillStyle = "#d9d8de";
+    ctx.fillStyle = th.grid;
     ctx.beginPath();
-    ctx.arc(4, 4, 3, 0, Math.PI * 2);
+    ctx.arc(4, 4, 2.6, 0, Math.PI * 2);
     ctx.fill();
   }
   const t = new THREE.CanvasTexture(c);
@@ -106,6 +111,43 @@ function paperTexture(): THREE.CanvasTexture {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = 8;
   return t;
+}
+
+/** Invisible material for hit boxes, shared by every element. */
+const HIDDEN = new THREE.MeshBasicMaterial({ visible: false });
+HIDDEN.userData.shared = true;
+const PACKET = new THREE.IcosahedronGeometry(4.5, 1);
+PACKET.userData.shared = true;
+
+/** `#rrggbb` plus an alpha byte. */
+function alpha(color: string, a: number): string {
+  return `${color}${Math.round(a * 255)
+    .toString(16)
+    .padStart(2, "0")}`;
+}
+
+/** A polyline with its corners rounded off by up to `radius`. */
+function roundedPath(v: THREE.Vector3[], radius: number): THREE.CurvePath<THREE.Vector3> {
+  const path = new THREE.CurvePath<THREE.Vector3>();
+  let from = v[0] as THREE.Vector3;
+  for (let i = 1; i < v.length; i++) {
+    const corner = v[i] as THREE.Vector3;
+    const next = v[i + 1];
+    if (!next || radius <= 0) {
+      path.add(new THREE.LineCurve3(from, corner));
+      from = corner;
+      continue;
+    }
+    const inLen = corner.distanceTo(from);
+    const outLen = next.distanceTo(corner);
+    const r = Math.min(radius, inLen / 2, outLen / 2);
+    const a = corner.clone().lerp(from, r / Math.max(inLen, 1e-6));
+    const b = corner.clone().lerp(next, r / Math.max(outLen, 1e-6));
+    if (from.distanceTo(a) > 0.01) path.add(new THREE.LineCurve3(from, a));
+    if (r > 0.01) path.add(new THREE.QuadraticBezierCurve3(a, corner, b));
+    from = b;
+  }
+  return path;
 }
 
 export class Scene3D {
@@ -117,6 +159,10 @@ export class Scene3D {
   #controls: OrbitControls | null = null;
   #root = new THREE.Group();
   #sun = new THREE.DirectionalLight("#ffffff", 1.4);
+  #hemi = new THREE.HemisphereLight("#ffffff", "#d8d2c0", 1.9);
+  #paper: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null;
+  #shadowCatcher: THREE.Mesh<THREE.PlaneGeometry, THREE.ShadowMaterial> | null = null;
+  #lighting = "";
   #preview: THREE.Object3D | null = null;
   #cache = new Map<string, { key: string; obj: THREE.Object3D; type: ElementType }>();
   #pickables: THREE.Object3D[] = [];
@@ -150,6 +196,10 @@ export class Scene3D {
     host.prepend(canvas);
 
     this.#setupScene();
+    onThemeChange(() => {
+      this.#applyTheme();
+      this.invalidate();
+    });
 
     // Registered before OrbitControls so a press on a node can disable orbiting.
     canvas.addEventListener("pointerdown", (e) => this.#onDown(e));
@@ -188,21 +238,19 @@ export class Scene3D {
   }
 
   #setupScene(): void {
-    this.#scene.background = new THREE.Color(PAPER);
-    this.#scene.add(new THREE.HemisphereLight("#ffffff", "#d8d2c0", 1.9));
+    this.#scene.add(this.#hemi);
     this.#sun.castShadow = true;
     this.#sun.shadow.mapSize.set(2048, 2048);
-    this.#sun.shadow.radius = 4;
-    this.#sun.shadow.bias = -0.0004;
-    this.#sun.shadow.normalBias = 0.6;
+    this.#sun.shadow.radius = 5;
+    this.#sun.shadow.blurSamples = 12;
+    this.#sun.shadow.bias = -0.0005;
+    this.#sun.shadow.normalBias = 0.5;
     this.#scene.add(this.#sun, this.#sun.target);
 
     const size = 60000;
-    const map = paperTexture();
-    map.repeat.set(size / GRID, size / GRID);
     const paper = new THREE.Mesh(
       new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ map }),
+      new THREE.MeshBasicMaterial(),
     );
     // The grid dot sits at the texel origin; align it with the 2D grid.
     paper.position.set(-2, -0.05, -2);
@@ -212,7 +260,52 @@ export class Scene3D {
       new THREE.ShadowMaterial({ opacity: 0.16 }),
     );
     shadows.receiveShadow = true;
+    this.#paper = paper;
+    this.#shadowCatcher = shadows;
     this.#scene.add(paper, shadows, this.#root);
+    this.#applyTheme();
+  }
+
+  /** Background, ground grid and shadow strength for the current theme. */
+  #applyTheme(): void {
+    const t = theme();
+    this.#scene.background = new THREE.Color(t.paper);
+    this.#renderer?.setClearColor(t.paper);
+    const paper = this.#paper;
+    if (paper) {
+      const size = 60000;
+      paper.material.map?.dispose();
+      const map = paperTexture(t);
+      map.repeat.set(size / GRID, size / GRID);
+      paper.material.map = map;
+      paper.material.needsUpdate = true;
+    }
+    if (this.#shadowCatcher) this.#shadowCatcher.material.opacity = t.dark ? 0.32 : 0.14;
+    this.#lighting = "";
+    this.#dirty = true;
+  }
+
+  /**
+   * Light rig per look and theme. Clean: a soft key light and a strong sky fill, tuned so
+   * top, left and right faces read as three distinct tones like an isometric illustration.
+   * Sketch: the brighter rig the two-tone toon shading was designed for.
+   */
+  #applyLighting(look: Look): void {
+    const t = theme();
+    const key = `${look}|${t.name}`;
+    if (key === this.#lighting) return;
+    this.#lighting = key;
+    if (look === "clean") {
+      this.#hemi.color.set("#ffffff");
+      this.#hemi.groundColor.set(t.dark ? "#5b6270" : mix("#ffffff", t.paper, 0.6));
+      this.#hemi.intensity = t.dark ? 1.85 : 2.05;
+      this.#sun.intensity = t.dark ? 1.25 : 1.15;
+    } else {
+      this.#hemi.color.set("#ffffff");
+      this.#hemi.groundColor.set(t.dark ? "#555b66" : "#d8d2c0");
+      this.#hemi.intensity = 1.9;
+      this.#sun.intensity = 1.4;
+    }
   }
 
   // ---------------------------------------------------------------- visibility
@@ -255,6 +348,7 @@ export class Scene3D {
   }
 
   #lineResolution(w: number, h: number): void {
+    outlineResolution.value.set(w, h);
     this.#scene.traverse((o) => {
       const m = (o as THREE.Mesh).material;
       if (m instanceof LineMaterial) m.resolution.set(w, h);
@@ -434,6 +528,8 @@ export class Scene3D {
   #sync(selection = this.#store.state.selection): void {
     this.#stale = false;
     const doc = this.#store.doc;
+    const look = doc.look;
+    this.#applyLighting(look);
     const seen = new Set<string>();
     const zoneBase = new Map<string, number>();
     doc.zones.forEach((z, i) => {
@@ -444,7 +540,7 @@ export class Scene3D {
 
     const place = (type: ElementType, id: string, key: unknown, build: () => THREE.Object3D) => {
       seen.add(id);
-      const fullKey = JSON.stringify([this.#generation, id === selection, key]);
+      const fullKey = JSON.stringify([this.#generation, look, id === selection, key]);
       let entry = this.#cache.get(id);
       if (!entry || entry.key !== fullKey) {
         if (entry) this.#dispose(entry.obj);
@@ -458,27 +554,27 @@ export class Scene3D {
 
     for (const z of doc.zones) {
       const base = zoneBase.get(z.id) ?? 0;
-      place("zone", z.id, [z, base], () => this.#buildZone(z, base, z.id === selection));
+      place("zone", z.id, [z, base], () => this.#buildZone(z, base, z.id === selection, look));
     }
     for (const n of doc.nodes) {
       const base = baseAt(nodeBox(n));
-      place("node", n.id, [n, base], () => this.#buildNode(n, base, n.id === selection));
+      place("node", n.id, [n, base], () => this.#buildNode(n, base, n.id === selection, look));
     }
     for (const e of doc.edges) {
       const pts = edgePath(doc, e);
       if (!pts) continue;
       const ends = [e.from, e.to].map((id) => this.#anchorHeight(doc, id, zoneBase));
       place("edge", e.id, [e, pts, ends], () =>
-        this.#buildEdge(e, pts, ends as [number, number], e.id === selection),
+        this.#buildEdge(e, pts, ends as [number, number], e.id === selection, look),
       );
     }
     for (const l of doc.lines) {
       const bases = l.points.map((p) => baseAt(pointBox(p)));
-      place("line", l.id, [l, bases], () => this.#buildLine(l, bases, l.id === selection));
+      place("line", l.id, [l, bases], () => this.#buildLine(l, bases, l.id === selection, look));
     }
     for (const n of doc.notes) {
       const base = baseAt(noteBox(n));
-      place("note", n.id, [n, base], () => this.#buildNote(n, base, n.id === selection));
+      place("note", n.id, [n, base], () => this.#buildNote(n, base, n.id === selection, look));
     }
 
     for (const [id, entry] of this.#cache) {
@@ -500,8 +596,7 @@ export class Scene3D {
       counts[type]++;
       obj.traverse((o) => {
         if (o.userData.pick) this.#pickables.push(o);
-        if (o instanceof THREE.Mesh && [o.material].flat()[0] instanceof THREE.MeshToonMaterial)
-          meshes++;
+        if (o instanceof THREE.Mesh && o.userData.solid) meshes++;
       });
       const packets = obj.userData.packets as Packets | undefined;
       if (packets) this.#packets.push(packets);
@@ -542,7 +637,7 @@ export class Scene3D {
     const center = box.getCenter(new THREE.Vector3());
     const radius = box.getBoundingSphere(new THREE.Sphere()).radius + 100;
     this.#sun.target.position.copy(center);
-    this.#sun.position.copy(center).add(new THREE.Vector3(-0.45, 1, 0.25).setLength(radius * 2));
+    this.#sun.position.copy(center).add(new THREE.Vector3(-0.4, 1, 0.5).setLength(radius * 2));
     const cam = this.#sun.shadow.camera;
     cam.left = cam.bottom = -radius;
     cam.right = cam.top = radius;
@@ -556,11 +651,11 @@ export class Scene3D {
     obj.removeFromParent();
     obj.traverse((o) => {
       const mesh = o as THREE.Mesh;
-      mesh.geometry?.dispose();
+      // Model geometry and materials are shared through caches (see style.ts, models.ts).
+      if (mesh.geometry && !mesh.geometry.userData.shared) mesh.geometry.dispose();
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const m of mats) {
-        // Toon materials are shared through the model cache.
-        if (!m || m instanceof THREE.MeshToonMaterial) continue;
+        if (!m || m.userData.shared) continue;
         (m as THREE.MeshBasicMaterial).map?.dispose();
         m.dispose();
       }
@@ -578,63 +673,113 @@ export class Scene3D {
 
   // ---------------------------------------------------------------- builders
 
-  #outline(selected: boolean, color = INK, width = 1.6) {
-    return selected ? { color: ACCENT, width: width + 1.6 } : { color, width };
-  }
-
-  #buildZone(z: Zone, base: number, selected: boolean): THREE.Object3D {
+  #buildZone(z: Zone, base: number, selected: boolean, look: Look): THREE.Object3D {
+    const t = theme();
     const info = ZONE_KINDS[z.kind ?? "generic"];
-    const color = z.color ?? info.color;
+    // Zones are large areas: on dark themes they sink further into the paper than nodes.
+    const raw = z.color ?? info.color;
+    const color = t.dark ? mix(raw, t.paper, 0.76) : surface(raw);
+    const style = z.style ?? info.style;
+    const clean = look === "clean";
     const g = new THREE.Group();
-    const geo = new THREE.BoxGeometry(z.w, SLAB, z.h).translate(
-      z.x + z.w / 2,
-      base + SLAB / 2,
-      z.y + z.h / 2,
-    );
-    const slab = new THREE.Mesh(geo, [
-      toon(darker(color, 0.08)),
-      toon(darker(color, 0.08)),
-      toon(color),
-      toon(color),
-      toon(darker(color, 0.08)),
-      toon(darker(color, 0.08)),
-    ]);
+    const geo = clean
+      ? new RoundedBoxGeometry(z.w, SLAB, z.h, 2, 4)
+      : new THREE.BoxGeometry(z.w, SLAB, z.h);
+    geo.translate(z.x + z.w / 2, base + SLAB / 2, z.y + z.h / 2);
+    const side = solid(darker(color, t.dark ? 0.05 : clean ? 0.12 : 0.08), look);
+    const top = solid(color, look);
+    // BoxGeometry face groups: +x, -x, +y, -y, +z, -z.
+    const slab = new THREE.Mesh(geo, [side, side, top, top, side, side]);
     slab.receiveShadow = true;
     slab.castShadow = true;
     slab.userData.pick = true;
+    slab.userData.solid = true;
     g.add(slab);
-    g.add(
-      ink(creases(geo), rng(hashSeed(z.id)), {
-        ...this.#outline(selected, "#495057", 2),
-        style: z.style ?? info.style,
-        jitter: 0.7,
-      }),
-    );
+
+    if (clean) {
+      // A crisp inset border on the flat top, in a deeper shade of the zone colour.
+      const inset = 6;
+      const x0 = z.x + inset;
+      const x1 = z.x + z.w - inset;
+      const z0 = z.y + inset;
+      const z1 = z.y + z.h - inset;
+      const y = base + SLAB + 0.25;
+      const corners = [
+        new THREE.Vector3(x0, y, z0),
+        new THREE.Vector3(x1, y, z0),
+        new THREE.Vector3(x1, y, z1),
+        new THREE.Vector3(x0, y, z1),
+        new THREE.Vector3(x0, y, z0),
+      ];
+      const loop = roundedPath(corners, 8);
+      const pts = loop.getSpacedPoints(Math.max(64, Math.round(loop.getLength() / 6)));
+      const segs: number[] = [];
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1] as THREE.Vector3;
+        const b = pts[i] as THREE.Vector3;
+        segs.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      }
+      const stroke = selected
+        ? t.accent
+        : t.dark
+          ? mix(color, t.zoneStroke, 0.55)
+          : mix(darker(color, 0.4), t.zoneStroke, 0.35);
+      g.add(
+        ink(segs, () => 0.5, {
+          color: stroke,
+          width: selected ? 2.6 : 1.4,
+          style,
+          jitter: 0,
+          pixels: true,
+        }),
+      );
+    } else {
+      g.add(
+        ink(creases(geo), rng(hashSeed(z.id)), {
+          color: selected ? t.accent : t.zoneStroke,
+          width: selected ? 3.6 : 2,
+          style,
+          jitter: 0.7,
+        }),
+      );
+    }
+    const font = fontFamily(look);
     const label = flatLabel(
       [
-        { text: info.label.toUpperCase(), size: 13, color: "#868e96", weight: 700 },
-        { text: z.label ?? "", size: 26 },
+        {
+          text: info.label.toUpperCase(),
+          size: clean ? 11 : 13,
+          color: t.muted,
+          weight: clean ? 600 : 700,
+          letterSpacing: clean ? 1.2 : 0,
+        },
+        { text: z.label ?? "", size: clean ? 22 : 26, weight: clean ? 600 : 400 },
       ],
-      { padding: 0 },
+      { padding: 0, font },
     );
-    label.position.set(z.x + 12, base + SLAB + 0.2, z.y + 8);
+    label.position.set(z.x + (clean ? 16 : 12), base + SLAB + 0.3, z.y + (clean ? 14 : 8));
     g.add(label);
     return g;
   }
 
-  #buildNode(n: Node, base: number, selected: boolean): THREE.Object3D {
+  #buildNode(n: Node, base: number, selected: boolean, look: Look): THREE.Object3D {
+    const t = theme();
     const info = NODE_KINDS[n.kind];
-    const g = nodeModel(
-      n.kind,
-      n.color ?? info.color,
-      info.height,
-      rng(hashSeed(n.id)),
-      this.#outline(selected, INK, 1.8),
-    );
+    const g = nodeModel(n.kind, n.color ?? info.color, info.height, {
+      look,
+      selected,
+      seed: hashSeed(n.id),
+    });
     g.position.set(n.x, base, n.y);
     if (n.label) {
-      const label = labelSprite([{ text: n.label, size: 18 }], { background: "#ffffffb0" });
-      label.position.set(0, info.height + 10, 0);
+      const clean = look === "clean";
+      const label = labelSprite(
+        [{ text: n.label, size: clean ? 15 : 18, weight: clean ? 600 : 400 }],
+        clean
+          ? { background: alpha(t.panel, 0.92), border: t.line, padding: 5, font: fontFamily(look) }
+          : { background: alpha(t.panel, 0.7), font: fontFamily(look) },
+      );
+      label.position.set(0, info.height + (clean ? 12 : 10), 0);
       label.userData.pick = true;
       g.add(label);
     }
@@ -645,7 +790,7 @@ export class Scene3D {
         (info.height + 10) / 2,
         0,
       ),
-      new THREE.MeshBasicMaterial({ visible: false }),
+      HIDDEN,
     );
     hit.userData.pick = true;
     g.add(hit);
@@ -659,7 +804,9 @@ export class Scene3D {
     to: number,
     radius: number,
     style: StrokeStyle | undefined,
+    look: Look,
   ): THREE.BufferGeometry | null {
+    const clean = look === "clean";
     const length = curve.getLength();
     const span = (to - from) * length;
     if (span <= 0.5) return null;
@@ -668,13 +815,18 @@ export class Scene3D {
       const pts = Array.from({ length: steps + 1 }, (_, i) =>
         curve.getPointAt(a + ((b - a) * i) / steps),
       );
-      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), steps, radius, 6);
+      return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), steps, radius, clean ? 8 : 6);
     };
     if (style === "dotted") {
       const pieces: THREE.BufferGeometry[] = [];
       for (let d = 2; d < span; d += 9) {
         const p = curve.getPointAt(from + d / length);
-        pieces.push(new THREE.IcosahedronGeometry(radius * 1.1, 0).translate(p.x, p.y, p.z));
+        pieces.push(
+          (clean
+            ? new THREE.SphereGeometry(radius * 1.2, 8, 6)
+            : new THREE.IcosahedronGeometry(radius * 1.1, 0)
+          ).translate(p.x, p.y, p.z),
+        );
       }
       return pieces.length > 0 ? mergeGeometries(pieces) : null;
     }
@@ -694,6 +846,7 @@ export class Scene3D {
     curve: THREE.Curve<THREE.Vector3>,
     arrow: Arrow | undefined,
     material: THREE.Material,
+    look: Look,
     size = 14,
   ): [number, number] {
     const length = curve.getLength();
@@ -701,10 +854,16 @@ export class Scene3D {
     const head = (t: number, towards: 1 | -1) => {
       const tip = curve.getPointAt(t);
       const dir = curve.getTangentAt(t).multiplyScalar(towards);
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(size * 0.42, size, 10), material);
+      const cone = new THREE.Mesh(
+        look === "clean"
+          ? new THREE.ConeGeometry(size * 0.36, size, 20)
+          : new THREE.ConeGeometry(size * 0.42, size, 10),
+        material,
+      );
       cone.position.copy(tip).addScaledVector(dir, -size / 2);
       cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
       cone.castShadow = true;
+      cone.userData.solid = true;
       g.add(cone);
     };
     const start = arrow === "start" || arrow === "both";
@@ -714,22 +873,28 @@ export class Scene3D {
     return [start ? cut : 0, end ? 1 - cut : 1];
   }
 
-  #buildEdge(e: Edge, pts: Point[], [ya, yb]: [number, number], selected: boolean) {
+  #buildEdge(
+    e: Edge,
+    pts: Point[],
+    [ya, yb]: [number, number],
+    selected: boolean,
+    look: Look,
+  ): THREE.Object3D {
+    const t = theme();
+    const clean = look === "clean";
     const g = new THREE.Group();
-    const color = selected ? ACCENT : (e.color ?? INK);
-    const material = toon(color);
+    const color = selected ? t.accent : (e.color ?? t.ink);
+    const material = solid(color, look);
     const [a, b] = [pts[0] as Point, pts[pts.length - 1] as Point];
     let curve: THREE.Curve<THREE.Vector3>;
-    if (e.route === "orthogonal") {
-      // Runs level at the higher end, with short drops to each endpoint.
+    if (pts.length > 2 || e.route === "orthogonal") {
+      // Follows the 2D route (bends included), level at the higher end, with short drops
+      // to each endpoint; clean corners are rounded off.
       const top = Math.max(ya, yb);
-      const path = new THREE.CurvePath<THREE.Vector3>();
       const v = pts.map(
         ([x, y], i) => new THREE.Vector3(x, i === 0 ? ya : i === pts.length - 1 ? yb : top, y),
       );
-      for (let i = 1; i < v.length; i++)
-        path.add(new THREE.LineCurve3(v[i - 1] as THREE.Vector3, v[i] as THREE.Vector3));
-      curve = path;
+      curve = roundedPath(v, clean ? 14 : 0);
     } else {
       const start = new THREE.Vector3(a[0], ya, a[1]);
       const end = new THREE.Vector3(b[0], yb, b[1]);
@@ -739,25 +904,36 @@ export class Scene3D {
     }
     // Matches the 2D view and the Rust model: edges point at `to` by default.
     const arrow = e.arrow ?? "end";
-    const [from, to] = this.#arrowHeads(g, curve, arrow, material);
-    const tube = this.#tube(curve, from, to, selected ? 3.2 : 2.2, e.style);
+    const [from, to] = this.#arrowHeads(g, curve, arrow, material, look, clean ? 13 : 14);
+    const radius = clean ? (selected ? 2.6 : 1.6) : selected ? 3.2 : 2.2;
+    const tube = this.#tube(curve, from, to, radius, e.style, look);
     if (tube) {
       const mesh = new THREE.Mesh(tube, material);
       mesh.castShadow = true;
+      mesh.userData.solid = true;
       g.add(mesh);
     }
-    const hit = new THREE.Mesh(
-      new THREE.TubeGeometry(curve, 24, 9, 5),
-      new THREE.MeshBasicMaterial({ visible: false }),
-    );
+    const hit = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 9, 5), HIDDEN);
     hit.userData.pick = true;
     g.add(hit);
 
     if (e.label) {
-      const label = labelSprite([{ text: e.label, size: 16, color: e.color ?? "#495057" }], {
-        background: "#ffffffe6",
-        padding: 5,
-      });
+      const label = labelSprite(
+        [
+          {
+            text: e.label,
+            size: clean ? 13 : 16,
+            color: e.color ?? (clean ? t.muted : t.ink),
+            weight: clean ? 500 : 400,
+          },
+        ],
+        {
+          background: alpha(t.panel, clean ? 0.94 : 0.9),
+          border: clean ? t.line : undefined,
+          padding: 5,
+          font: fontFamily(look),
+        },
+      );
       label.position.copy(curve.getPointAt(0.5)).add(new THREE.Vector3(0, 6, 0));
       label.userData.pick = true;
       g.add(label);
@@ -765,9 +941,11 @@ export class Scene3D {
 
     const length = curve.getLength();
     const count = THREE.MathUtils.clamp(Math.round(length / 160), 1, 4);
-    const packetMat = new THREE.MeshBasicMaterial({ color: e.color ?? ACCENT });
-    const meshes = Array.from({ length: count }, () => {
-      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(4.5, 1), packetMat);
+    const packetMat = new THREE.MeshBasicMaterial({ color: e.color ?? t.accent });
+    const meshes = Array.from({ length: count }, (_, i) => {
+      const m = new THREE.Mesh(PACKET, packetMat);
+      // Start on the edge, never at the origin, even before the first animation step.
+      curve.getPointAt(i / count, m.position);
       m.visible = this.#store.state.animate;
       g.add(m);
       return m;
@@ -776,38 +954,40 @@ export class Scene3D {
     return g;
   }
 
-  #buildLine(l: Line, bases: number[], selected: boolean): THREE.Object3D {
+  #buildLine(l: Line, bases: number[], selected: boolean, look: Look): THREE.Object3D {
+    const t = theme();
     const g = new THREE.Group();
-    const color = selected ? ACCENT : (l.color ?? INK);
+    const color = selected ? t.accent : (l.color ?? t.ink);
     const v = l.points.map(([x, y], i) => new THREE.Vector3(x, (bases[i] ?? 0) + 0.6, y));
     const path = new THREE.CurvePath<THREE.Vector3>();
     for (let i = 1; i < v.length; i++)
       path.add(new THREE.LineCurve3(v[i - 1] as THREE.Vector3, v[i] as THREE.Vector3));
-    const material = toon(color);
-    const [from, to] = this.#arrowHeads(g, path, l.arrow, material, 12);
+    const material = solid(color, look);
+    const [from, to] = this.#arrowHeads(g, path, l.arrow, material, look, 12);
     for (const c of g.children) {
       // Flat arrow heads lie on the ground, like ink on paper.
       c.scale.set(1, 1, 0.25);
     }
-    const tube = this.#tube(path, from, to, selected ? 2.2 : 1.4, l.style);
+    const tube = this.#tube(path, from, to, selected ? 2.2 : 1.4, l.style, look);
     if (tube) g.add(new THREE.Mesh(tube, material));
     const hit = new THREE.Mesh(
       mergeGeometries(
         path.curves.map((c) => new THREE.TubeGeometry(c as THREE.LineCurve3, 1, 8, 4)),
       ),
-      new THREE.MeshBasicMaterial({ visible: false }),
+      HIDDEN,
     );
     hit.userData.pick = true;
     g.add(hit);
     return g;
   }
 
-  #buildNote(n: Note, base: number, selected: boolean): THREE.Object3D {
+  #buildNote(n: Note, base: number, selected: boolean, look: Look): THREE.Object3D {
+    const t = theme();
     const size = TEXT_SIZES[n.size ?? "m"];
-    const color = selected ? ACCENT : (n.color ?? INK);
+    const color = selected ? t.accent : (n.color ?? t.ink);
     const label = flatLabel(
       n.text.split("\n").map((text) => ({ text, size, color })),
-      { padding: 0 },
+      { padding: 0, font: fontFamily(look) },
     );
     label.position.set(n.x, base + 0.4, n.y);
     label.userData.pick = true;
@@ -970,7 +1150,7 @@ export class Scene3D {
     this.#preview = null;
     if (from && to) {
       this.#preview = ink([from.x, from.y, from.z, to.x, to.y, to.z], () => 0.5, {
-        color: ACCENT,
+        color: theme().accent,
         width: 2,
         style: "dashed",
         jitter: 0,
@@ -998,7 +1178,8 @@ export class Scene3D {
       renderer.setPixelRatio(1);
       renderer.setSize(width, height, false);
       this.#sync(null);
-      this.#lineResolution(width, height);
+      // Pixel-wide strokes and outlines scale with the photo, like everything else.
+      this.#lineResolution(w, h);
       renderer.render(this.#scene, this.#camera);
       return await new Promise<Blob>((resolve, reject) =>
         renderer.domElement.toBlob(

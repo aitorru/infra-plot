@@ -15,15 +15,15 @@ El tipo vive en el modelo Rust y se propaga al resto. TypeScript obliga a cubrir
 2. **Regenerar** — `devenv shell -- gen-schema` (actualiza `schema/diagram.schema.json` y
    `web/src/model/generated.ts`; ambos se commitean, nunca se editan a mano).
 3. **Catálogo** — `web/src/model/catalog.ts`, `NODE_KINDS`: `label`, `color` (pastel en la
-   línea de los existentes, estilo Open Color), `group` (`compute | network | data | other`,
-   decide la sección de la paleta) y `height` (altura del modelo 3D en unidades de mundo).
-4. **Glifo 2D** — `web/src/render2d/glyphs.ts`: nuevo `case` dibujado con roughjs dentro de la
-   caja `s × s` (usa `x0`, `y0`, `cx`, `cy`, la unidad `u` y los estilos `base`/`line`).
-   Mira los `case` vecinos como referencia de proporciones.
-5. **Modelo 3D** — `web/src/render3d/models.ts`: nuevo `case` que devuelva las `Part[]`
-   (primitivas `box`, `prism`, `ball`…; `color: "dark"` para detalles). Low-poly, que se
-   reconozca en isométrico.
-6. **README** — lista «Tipos de nodo» (y el recuento «20 tipos» del bloque TOML).
+   línea de los existentes, estilo Open Color), `group` (una clave de `NODE_GROUPS`: decide la
+   sección de la paleta) y `height` (altura del modelo 3D en unidades de mundo).
+4. **Icono 2D** — `web/src/render2d/icons-clean.ts`, `CLEAN_ICONS`: paths SVG en una rejilla
+   de 24 (partes `body` rellenas, `line` solo trazo, `solid` detalles). Lo usan el look `clean`,
+   la paleta y, si no hay `case` propio en `glyphs.ts`, también el look `sketch`.
+5. **Modelo 3D** — `web/src/render3d/models.ts`: nuevo `case` con las piezas del modelo
+   (primitivas de `shapes.ts`, tonos de `style.ts`). Debe reconocerse en isométrico en ambos
+   looks; comparte geometría entre nodos del mismo tipo.
+6. **README** — tabla «Tipos de nodo» (y el recuento «42 tipos» del bloque TOML).
 7. **Ejemplo (opcional)** — úsalo en algún `examples/*.toml` si aporta.
 
 ## Zona (`ZoneKind`)

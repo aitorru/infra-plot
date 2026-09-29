@@ -53,9 +53,9 @@ test("3D view renders every element and paints the canvas", async ({ page }) => 
   await expect(view).toHaveAttribute("data-zones", String(hello.zones?.length));
   await expect(view).toHaveAttribute("data-edges", String(hello.edges?.length));
   await expect(view).toHaveAttribute("data-notes", String(hello.notes?.length));
-  // hello.json: 1 zone slab + user (2) + LB (2) + API (2) + Postgres (3) + 3 edge tubes
+  // hello.json: 1 zone slab + user (2) + LB (3) + API (4) + Postgres (3) + 3 edge tubes
   // + 3 arrow heads.
-  await expect(view).toHaveAttribute("data-meshes", "16");
+  await expect(view).toHaveAttribute("data-meshes", "19");
   await expect(view).toHaveAttribute("data-packets", /^[1-9]/);
 
   const canvas = page.getByTestId("canvas-3d");

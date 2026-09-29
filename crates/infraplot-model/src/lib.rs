@@ -24,6 +24,9 @@ pub struct Diagram {
     pub title: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
+    /// How the diagram is drawn: crisp vector shapes (`clean`) or hand-drawn (`sketch`).
+    #[serde(default, skip_serializing_if = "Look::is_default")]
+    pub look: Look,
     /// Rectangular areas that group nodes (networks, VPCs, clusters...).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub zones: Vec<Zone>,
@@ -39,6 +42,21 @@ pub struct Diagram {
     /// Free-floating text.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<Note>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Look {
+    #[default]
+    Clean,
+    Sketch,
+}
+
+impl Look {
+    #[allow(clippy::trivially_copy_pass_by_ref)] // serde's `skip_serializing_if` passes a reference.
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -72,9 +90,13 @@ pub enum ZoneKind {
     Vpc,
     Subnet,
     Dmz,
+    AvailabilityZone,
+    Account,
+    SecurityGroup,
     K8sCluster,
     Namespace,
     OnPrem,
+    DataCenter,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -99,26 +121,55 @@ pub struct Node {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum NodeKind {
+    // Generic
+    Component,
+    // Compute
     Service,
     Server,
     Vm,
     Container,
     Pod,
     K8s,
+    Function,
+    Worker,
+    Scheduler,
+    Gpu,
+    // Network
     Proxy,
     LoadBalancer,
     ApiGateway,
+    Gateway,
+    Router,
+    Switch,
+    Vpn,
+    Cdn,
+    Dns,
+    // Data
     Database,
     Cache,
     Queue,
+    Stream,
     Storage,
-    Function,
+    Bucket,
+    Warehouse,
+    Search,
+    // Security
     Firewall,
-    Cdn,
-    Dns,
-    User,
-    Internet,
+    Identity,
+    Secrets,
+    // Operations
     Monitoring,
+    Logging,
+    CiCd,
+    Registry,
+    Notification,
+    // Clients and outside world
+    User,
+    Client,
+    Mobile,
+    Browser,
+    Internet,
+    External,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -137,6 +188,11 @@ pub struct Edge {
     pub arrow: Arrow,
     #[serde(default)]
     pub route: Route,
+    /// Where the middle segment of an `orthogonal` route sits, as a fraction (0–1) of the
+    /// gap between the facing sides of `from` and `to` (or between their centres when they
+    /// overlap along the main axis). Defaults to `0.5`, halfway.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bend: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
 }
@@ -284,6 +340,11 @@ impl Diagram {
             let p = format!("edges[{i}]");
             v.id(&p, &e.id);
             v.color(&p, e.color.as_deref());
+            if let Some(bend) = e.bend
+                && !(0.0..=1.0).contains(&bend)
+            {
+                v.push(format!("{p}.bend"), "bend must be a number between 0 and 1");
+            }
             for (field, target) in [("from", &e.from), ("to", &e.to)] {
                 if !targets.contains(target.as_str()) {
                     v.push(
@@ -374,4 +435,63 @@ pub fn json_schema() -> serde_json::Value {
         );
     }
     schema
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn diagram(extra: &str) -> Diagram {
+        Diagram::from_toml(&format!(
+            r#"
+version = 1
+title = "t"
+{extra}
+
+[[nodes]]
+id = "a"
+kind = "component"
+x = 0
+y = 0
+
+[[nodes]]
+id = "b"
+kind = "ci-cd"
+x = 200
+y = 0
+"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn look_defaults_to_clean_and_is_not_serialised() {
+        let d = diagram("");
+        assert_eq!(d.look, Look::Clean);
+        assert!(!d.to_json().contains("look"));
+        let d = diagram(r#"look = "sketch""#);
+        assert_eq!(d.look, Look::Sketch);
+        assert!(d.to_json().contains(r#""look": "sketch""#));
+    }
+
+    #[test]
+    fn bend_must_be_a_fraction() {
+        let mut d = diagram("");
+        d.edges.push(Edge {
+            id: "e".into(),
+            from: "a".into(),
+            to: "b".into(),
+            label: String::new(),
+            style: StrokeStyle::Solid,
+            arrow: Arrow::End,
+            route: Route::Orthogonal,
+            bend: Some(0.25),
+            color: None,
+        });
+        assert!(d.validate().is_empty());
+        d.edges[0].bend = Some(1.5);
+        let issues = d.validate();
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].path, "edges[0].bend");
+    }
 }

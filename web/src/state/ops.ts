@@ -2,7 +2,18 @@
 import { NODE_KINDS, ZONE_KINDS } from "../model/catalog";
 import type { Doc, Edge, Node, NodeKind, Zone, ZoneKind } from "../model/doc";
 import { findElement, uniqueId } from "../model/doc";
-import { contains, nodeBox, noteBox, type Point, snap, zoneBox } from "../model/geometry";
+import {
+  bendAt,
+  bendOf,
+  bendSegment,
+  contains,
+  nodeBox,
+  noteBox,
+  type Point,
+  segmentAxis,
+  snap,
+  zoneBox,
+} from "../model/geometry";
 
 export function addNode(doc: Doc, kind: NodeKind, [x, y]: Point): Node {
   const node: Node = {
@@ -168,4 +179,57 @@ export function renameId(doc: Doc, from: string, to: string): boolean {
     if (e.to === from) e.to = to;
   }
   return true;
+}
+
+/**
+ * Slides the middle segment of orthogonal edge `id` so it passes through `p` (only the
+ * coordinate along the edge's main axis matters). Returns the new bend, if it changed.
+ */
+export function bendEdgeTo(doc: Doc, id: string, p: Point, snapToGrid = true): number | undefined {
+  const bend = bendTarget(doc, id, p, snapToGrid);
+  const e = doc.edges.find((e) => e.id === id);
+  if (bend === undefined || !e) return undefined;
+  e.bend = bend;
+  return bend;
+}
+
+/** The bend `bendEdgeTo` would set, or undefined if it wouldn't change anything. */
+export function bendTarget(doc: Doc, id: string, p: Point, snapToGrid = true): number | undefined {
+  const e = doc.edges.find((e) => e.id === id);
+  const seg = e && bendSegment(doc, e);
+  if (!e || !seg) return undefined;
+  const i = seg.layout.axis === "x" ? 0 : 1;
+  const bend = bendAt(seg.layout, snap(p[i], snapToGrid));
+  return bend === bendOf(e) ? undefined : bend;
+}
+
+/** Moves point `index` of line `id` to `p`. */
+export function moveLineVertex(doc: Doc, id: string, index: number, p: Point): void {
+  const l = doc.lines.find((l) => l.id === id);
+  if (!l || index < 0 || index >= l.points.length) return;
+  l.points[index] = [p[0], p[1]];
+}
+
+/**
+ * Moves segment `index` (points `index` and `index + 1`) of line `id` perpendicular to itself,
+ * so horizontal segments move vertically and vertical ones horizontally. Neighbouring
+ * axis-aligned segments stay axis-aligned, which keeps right angles right. Diagonal segments
+ * move freely by (dx, dy). `orig` are the line's points when the drag started.
+ */
+export function moveLineSegment(
+  doc: Doc,
+  id: string,
+  index: number,
+  orig: readonly Point[],
+  dx: number,
+  dy: number,
+): void {
+  const l = doc.lines.find((l) => l.id === id);
+  const p = orig[index];
+  const q = orig[index + 1];
+  if (!l || !p || !q) return;
+  const axis = segmentAxis(p, q);
+  const mx = axis === "h" ? 0 : dx;
+  const my = axis === "v" ? 0 : dy;
+  l.points = orig.map(([x, y], i) => (i === index || i === index + 1 ? [x + mx, y + my] : [x, y]));
 }
