@@ -7,6 +7,7 @@
       "!**/dist",
       "!**/generated.ts",
       "!schema",
+      "!crates/infraplot-desktop/assets",
       "!**/playwright-report",
       "!**/test-results"
     ]

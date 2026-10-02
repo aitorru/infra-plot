@@ -1,0 +1,26 @@
+[package]
+publish = false
+name = "infraplot-desktop"
+description = "infra-plot desktop editor (gpui)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "infra-plot"
+path = "src/main.rs"
+
+[dependencies]
+infraplot-model.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+lyon.workspace = true
+serde.workspace = true
+toml.workspace = true
+unicode-segmentation.workspace = true
+
+[lints]
+workspace = true

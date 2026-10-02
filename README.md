@@ -1,7 +1,8 @@
 # infra-plot
 
 Editor web de diagramas de infraestructura: vista 2D (limpia o a mano alzada) y vista 3D
-isométrica, reproducibles desde JSON/TOML. Temas claro, oscuro, Solarized y NieR.
+isométrica, reproducibles desde JSON/TOML. Temas claro, oscuro, Solarized y NieR. También
+hay una [app de escritorio](#app-de-escritorio) nativa en Rust con gpui.
 
 ![Editor 2D con el ejemplo event-driven, tema claro y look clean](docs/screenshots/editor-2d.png)
 
@@ -10,6 +11,63 @@ isométrica, reproducibles desde JSON/TOML. Temas claro, oscuro, Solarized y Nie
 | Tema oscuro | NieR, look sketch | Vista 3D en Solarized |
 | --- | --- | --- |
 | ![Editor 2D en tema oscuro](docs/screenshots/editor-2d-dark.png) | ![Look sketch con el tema NieR](docs/screenshots/editor-2d-nier.png) | ![Vista 3D con el tema Solarized](docs/screenshots/view-3d-solarized.png) |
+
+## App de escritorio
+
+`crates/infraplot-desktop` es un editor 2D nativo (Rust + [gpui](https://www.gpui.rs), el
+framework de Zed) que abre y guarda los mismos ficheros JSON/TOML que el editor web. La
+ventana no tiene decoración del sistema: dibuja su propia barra de título (arrastrar para
+mover, doble clic para maximizar, botones de minimizar/maximizar/cerrar) y se redimensiona
+desde los bordes. En X11 sin compositor gpui no puede hacer la ventana transparente y vuelve a
+la decoración del sistema.
+
+![App de escritorio con el ejemplo k8s-platform](docs/screenshots/desktop.png)
+
+### Instalación
+
+```bash
+cargo install --locked --git https://github.com/aitorru/infra-plot infraplot-desktop
+infra-plot examples/three-tier.toml    # o sin argumentos para un diagrama vacío
+```
+
+Mientras el código viva en `develop`, añade `--branch develop`. El binario se llama
+`infra-plot` e incluye iconos, ejemplos y la fuente Inter. Necesita Rust ≥ 1.88 y, en Linux,
+estas librerías (fontconfig y xkbcommon para compilar; Wayland o X11 y Vulkan al ejecutar):
+
+| Distribución | Paquetes |
+| --- | --- |
+| Debian / Ubuntu | `pkg-config libfontconfig-dev libxkbcommon-x11-dev libwayland-dev libvulkan1 mesa-vulkan-drivers` |
+| Fedora | `pkgconf fontconfig-devel libxkbcommon-x11-devel wayland-devel vulkan-loader mesa-vulkan-drivers` |
+| Arch | `pkgconf fontconfig libxkbcommon-x11 wayland vulkan-icd-loader` (+ el driver Vulkan de tu GPU) |
+| NixOS / devenv | `devenv shell -- desktop [fichero]` (el shell trae todo) |
+
+`infra-plot --help` lista las opciones (`--theme light|dark|solarized|nier`; el tema elegido
+se recuerda en `~/.config/infra-plot/settings.toml`).
+
+### Uso
+
+- Barra de título: New, Open…, Examples (los cuatro de `examples/`), Save, Save as…, deshacer
+  y rehacer, y el tema. Guardar escribe TOML o JSON según la extensión del fichero.
+- Paleta (izquierda): herramientas, tipos de zona y los 42 tipos de nodo con sus iconos.
+  Clic en un tipo y luego en el lienzo para colocarlo.
+- Lienzo: mismas interacciones que la vista 2D web — mover (las zonas arrastran su
+  contenido; `Shift` las mueve solas), redimensionar zonas por las esquinas, conectar,
+  líneas por arrastre o punto a punto (`Enter`/doble clic para terminar, `Shift` para tramos
+  rectos), tiradores de codo y de tramos, ajuste a la rejilla (`Alt` lo desactiva).
+  Rueda: desplazar; `Ctrl`+rueda: zoom. `Espacio` o botón central: mover el lienzo.
+- Panel de propiedades (derecha): título y descripción del documento, o id, etiqueta,
+  tipo, estilo, flechas, ruta, codo, tamaño y color del elemento seleccionado. El id se
+  renombra con `Enter` y actualiza los edges.
+- Atajos: los de la tabla de [Atajos](#atajos) (`V`/`H`/`R`/`C`/`L`/`T`, `F`, `Supr`,
+  `Ctrl+Z`/`Ctrl+Y`, `Ctrl+D`, `Ctrl+S`, `Ctrl+O`, `Esc`), más `Ctrl+Shift+S` (guardar como),
+  `Ctrl+N` (nuevo), `Ctrl+=`/`Ctrl+-`/`Ctrl+0` (zoom) y `Ctrl+Q` (salir; pregunta si hay
+  cambios sin guardar).
+
+Respecto al editor web, de momento no tiene vista 3D ni export SVG/PNG, y el look `sketch`
+se dibuja como `clean` (se conserva en el fichero). La geometría y las operaciones de edición
+están en `crates/infraplot-model` (`geometry.rs`, `ops.rs`, `catalog.rs`), espejo de
+`web/src/model/geometry.ts` y `web/src/state/ops.ts`; los iconos se generan desde
+`icons-clean.ts` con `gen-icons`.
 
 ## Desarrollo
 
@@ -22,7 +80,8 @@ devenv shell -- dev    # o `devenv up`
 - Editor (Vite): http://localhost:31173 (escucha en todas las interfaces)
 - API (Axum): http://127.0.0.1:31080, proxificada por Vite en `/api`
 
-Otros comandos del shell: `lint`, `build`, `gen-schema`.
+Otros comandos del shell: `lint`, `build`, `gen-schema`, `gen-icons` (iconos de la app de
+escritorio) y `desktop [fichero]` (la app de escritorio).
 
 ### Perfiles
 

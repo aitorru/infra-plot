@@ -11,7 +11,9 @@ El tipo vive en el modelo Rust y se propaga al resto. TypeScript obliga a cubrir
 ## Nodo (`NodeKind`)
 
 1. **Rust** — `crates/infraplot-model/src/lib.rs`, enum `NodeKind` (serde `kebab-case`:
-   `LoadBalancer` → `"load-balancer"`). Colócalo junto a los de su grupo.
+   `LoadBalancer` → `"load-balancer"`). Colócalo junto a los de su grupo, y añádelo a la
+   tabla `node_kinds!` de `crates/infraplot-model/src/catalog.rs` (slug, label, color, grupo,
+   altura: los mismos valores que en `catalog.ts`; el `match` exhaustivo no compila si falta).
 2. **Regenerar** — `devenv shell -- gen-schema` (actualiza `schema/diagram.schema.json` y
    `web/src/model/generated.ts`; ambos se commitean, nunca se editan a mano).
 3. **Catálogo** — `web/src/model/catalog.ts`, `NODE_KINDS`: `label`, `color` (pastel en la
@@ -20,6 +22,9 @@ El tipo vive en el modelo Rust y se propaga al resto. TypeScript obliga a cubrir
 4. **Icono 2D** — `web/src/render2d/icons-clean.ts`, `CLEAN_ICONS`: paths SVG en una rejilla
    de 24 (partes `body` rellenas, `line` solo trazo, `solid` detalles). Lo usan el look `clean`,
    la paleta y, si no hay `case` propio en `glyphs.ts`, también el look `sketch`.
+   Después, `devenv shell -- gen-icons` regenera los SVG de la app de escritorio
+   (`crates/infraplot-desktop/assets/icons/`) y añade el slug a la lista `icons!` de
+   `crates/infraplot-desktop/src/icons.rs` (el test `every_kind_has_an_icon` lo comprueba).
 5. **Modelo 3D** — `web/src/render3d/models.ts`: nuevo `case` con las piezas del modelo
    (primitivas de `shapes.ts`, tonos de `style.ts`). Debe reconocerse en isométrico en ambos
    looks; comparte geometría entre nodos del mismo tipo.
@@ -29,7 +34,8 @@ El tipo vive en el modelo Rust y se propaga al resto. TypeScript obliga a cubrir
 ## Zona (`ZoneKind`)
 
 1. Enum `ZoneKind` en `lib.rs` → `gen-schema`.
-2. `ZONE_KINDS` en `catalog.ts`: `label`, `color`, `style` por defecto (`solid|dashed|dotted`).
+2. `ZONE_KINDS` en `catalog.ts`: `label`, `color`, `style` por defecto (`solid|dashed|dotted`),
+   y lo mismo en la tabla `zone_kinds!` de `crates/infraplot-model/src/catalog.rs`.
 3. Busca `ZONE_KINDS` y `ZoneKind` en `web/src/render2d` y `web/src/render3d` por si algún
    tipo tiene tratamiento especial.
 4. README: lista de `kind` en el bloque `[[zones]]`.
@@ -47,5 +53,6 @@ devenv shell -- bash -c 'lint && cargo test --workspace'
 ```
 
 Luego mira el resultado: arranca la app (skill `run-app`) y comprueba el icono en la paleta,
-en el lienzo 2D y en la vista 3D. El test E2E `palette shows rough icons for every kind`
+en el lienzo 2D y en la vista 3D, y también en la app de escritorio
+(`devenv shell -- desktop`). El test E2E `palette shows rough icons for every kind`
 (`e2e/tests/ui.spec.ts`) cubre la paleta automáticamente en CI.

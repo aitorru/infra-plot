@@ -36,11 +36,15 @@ lib.rs ──export-schema──▶ schema/diagram.schema.json ──json2ts─�
    - `web/src/ui/props.ts`: control en el panel de propiedades.
    - Renderizado: `web/src/render2d/canvas2d.ts` y `web/src/render3d/scene3d.ts`.
    - Export SVG/PNG en `web/src/ui/export.ts` si cambia lo que se dibuja.
-5. **Servidor** (`crates/infraplot-server/src/api.rs`) solo si cambia la API. Errores vía
+5. **Escritorio** (`crates/infraplot-desktop`): la geometría y las operaciones de edición
+   viven en Rust en `crates/infraplot-model/src/{geometry,ops}.rs` (espejo de
+   `geometry.ts`/`ops.ts`: un cambio en uno va en el otro). Dibujo en `paint.rs`, panel de
+   propiedades en `app.rs`, interacción en `state.rs`.
+6. **Servidor** (`crates/infraplot-server/src/api.rs`) solo si cambia la API. Errores vía
    `ApiError` (`400` parseo, `422` validación con `issues`). Rutas bajo `/api`.
-6. **Documentación**: sección «Formato del fichero» del README (bloque TOML comentado y lista
+7. **Documentación**: sección «Formato del fichero» del README (bloque TOML comentado y lista
    de comprobaciones) y, si aplica, la tabla de URLs.
-7. **Ejemplos**: `examples/` los usan los tests E2E (round-trip JSON/TOML en `editor.spec.ts`);
+8. **Ejemplos**: `examples/` los usan los tests E2E (round-trip JSON/TOML en `editor.spec.ts`);
    si el campo es relevante, úsalo en alguno.
 
 ## Verificar

@@ -5,6 +5,22 @@ let
   # (checked by `check-playwright-version`). Only the `e2e` profile pulls the
   # browsers in: they weigh ~1 GB and E2E runs in CI, not on the dev box.
   playwright = pkgs.playwright-driver;
+
+  # Native libraries of the desktop app (gpui). fontconfig and xkbcommon are linked at build
+  # time through pkg-config; wayland, the X11 libs and the Vulkan loader are dlopen'ed when
+  # the window opens, so they also go in LD_LIBRARY_PATH.
+  desktopLibs = [
+    pkgs.fontconfig
+    pkgs.freetype
+    pkgs.libxkbcommon
+    pkgs.wayland
+    pkgs.vulkan-loader
+    pkgs.libx11
+    pkgs.libxcb
+    pkgs.libxcursor
+    pkgs.libxi
+    pkgs.libxrandr
+  ];
 in
 {
   name = "infra-plot";
@@ -16,7 +32,8 @@ in
     pkgs.cargo-watch
     pkgs.taplo
     pkgs.biome
-  ];
+    pkgs.pkg-config
+  ] ++ desktopLibs;
 
   languages.rust = {
     enable = true;
@@ -53,6 +70,7 @@ in
     INFRAPLOT_WEB_PORT = "31173";
     INFRAPLOT_API_PORT = "31080";
     INFRAPLOT_BIND = "127.0.0.1:31080";
+    LD_LIBRARY_PATH = lib.makeLibraryPath desktopLibs;
   };
 
   scripts = {
@@ -61,6 +79,18 @@ in
       cd "$DEVENV_ROOT"
       cargo run --quiet -p infraplot-model --bin export-schema > schema/diagram.schema.json
       pnpm --filter web run gen:types
+    '';
+    # Line icons of the desktop app, generated from the web editor's `icons-clean.ts`.
+    gen-icons.exec = ''
+      set -euo pipefail
+      cd "$DEVENV_ROOT"
+      node web/scripts/gen-desktop-icons.ts crates/infraplot-desktop/assets/icons
+    '';
+    # The desktop editor (gpui). Arguments go to the app: `desktop examples/three-tier.toml`.
+    desktop.exec = ''
+      set -euo pipefail
+      cd "$DEVENV_ROOT"
+      cargo run --quiet -p infraplot-desktop -- "$@"
     '';
     check-playwright-version.exec = ''
       set -euo pipefail
@@ -143,7 +173,8 @@ in
   enterShell = ''
     echo "infra-plot dev shell · rust $(rustc --version | cut -d' ' -f2) · node $(node --version)"
     echo "  dev (o devenv up) → vite :$INFRAPLOT_WEB_PORT (abre esto) + api :$INFRAPLOT_API_PORT"
-    echo "  lint | build | gen-schema · e2e corre en CI (o: devenv --profile e2e shell -- e2e)"
+    echo "  lint | build | gen-schema | gen-icons · e2e corre en CI (o: devenv --profile e2e shell -- e2e)"
+    echo "  desktop [fichero] → editor de escritorio (gpui)"
   '';
 
   enterTest = ''
