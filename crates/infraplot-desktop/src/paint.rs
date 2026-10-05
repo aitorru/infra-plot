@@ -438,7 +438,9 @@ fn strokes(p: &mut Painter, pts: &[Point], style: StrokeStyle, arrow: Arrow, col
     }
     let z = p.camera.zoom;
     let d: Vec<f64> = dash(style, width).into_iter().map(|v| v * z).collect();
-    p.polyline(&line, CORNER, color, width * z, &d);
+    // gpui drops level or plumb strokes thinner than about 1.3 px altogether, so straight
+    // edges vanished when zoomed out: keep them at 1.5 px at least.
+    p.polyline(&line, CORNER, color, (width * z).max(1.5), &d);
     let mut tip = |from: Point, to: Point| {
         let a = (to[1] - from[1]).atan2(to[0] - from[0]);
         let bx = to[0] - a.cos() * head;

@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 infraplot-model.workspace = true
+infraplot-vault.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 gpui.workspace = true

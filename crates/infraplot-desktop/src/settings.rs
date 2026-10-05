@@ -8,6 +8,12 @@ use serde::{Deserialize, Serialize};
 pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,
+    /// infra-plot server used by "Open in web".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_url: Option<String>,
+    /// Vault open when the app last closed; reopened when started without a file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vault: Option<String>,
 }
 
 fn path() -> Option<PathBuf> {

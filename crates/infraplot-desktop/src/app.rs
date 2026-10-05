@@ -1,5 +1,7 @@
 //! The editor window: custom title bar (the window has no system decorations), palette,
-//! canvas, properties panel and status bar.
+//! canvas, properties panel and status bar. The network vault parts live in [`hub`].
+
+mod hub;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -17,6 +19,7 @@ use infraplot_model::{
     Arrow, Diagram, Look, NodeKind, Route, StrokeStyle, TextSize, ZoneKind, catalog::parse_hex,
 };
 
+use crate::app::hub::{Focus, Hub};
 use crate::input::{InputEvent, TextInput};
 use crate::paint::{self, Scene};
 use crate::settings::Settings;
@@ -110,11 +113,15 @@ enum Field {
 }
 
 /// Something that would discard unsaved changes, waiting for confirmation.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Pending {
     New,
     Open,
     Example(usize),
+    NewVault,
+    OpenVault,
+    /// A vault diagram, optionally selecting the node of a host.
+    OpenDiagram(PathBuf, Option<String>),
     Quit,
 }
 
@@ -122,6 +129,8 @@ enum Pending {
 enum Menu {
     Examples,
     NodeKind,
+    Vault,
+    Web,
 }
 
 struct Toast {
@@ -167,6 +176,8 @@ pub struct InfraPlot {
     window_title: String,
     /// Left button pressed on the title bar: the next move drags the window.
     title_drag: bool,
+    settings: Settings,
+    hub: Hub,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -184,6 +195,7 @@ impl InfraPlot {
         doc: Diagram,
         path: Option<PathBuf>,
         theme: ThemeName,
+        settings: Settings,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -203,6 +215,11 @@ impl InfraPlot {
             label: input("Label", Field::Label, cx),
             color: input("#rrggbb (default)", Field::Color, cx),
         };
+        let web_url = settings
+            .web_url
+            .clone()
+            .unwrap_or_else(|| crate::web::DEFAULT_URL.to_owned());
+        let hub = Hub::new(t, &web_url, cx, &mut subs);
         let this = cx.entity().downgrade();
         window.on_window_should_close(cx, move |_, cx| {
             this.update(cx, |app, cx| {
@@ -232,6 +249,8 @@ impl InfraPlot {
             confirm: None,
             window_title: String::new(),
             title_drag: false,
+            settings,
+            hub,
             _subscriptions: subs,
         }
     }
@@ -311,6 +330,9 @@ impl InfraPlot {
                     Err(e) => self.notify_msg(format!("{name}: {e}"), true, cx),
                 }
             }
+            Pending::NewVault => Self::vault_dialog(true, cx),
+            Pending::OpenVault => Self::vault_dialog(false, cx),
+            Pending::OpenDiagram(path, host) => self.open_vault_diagram(&path, host.as_deref(), cx),
             Pending::Quit => cx.quit(),
         }
         cx.notify();
@@ -467,10 +489,8 @@ impl InfraPlot {
 
     fn set_theme(&mut self, theme: ThemeName, cx: &mut Context<Self>) {
         self.theme = theme;
-        Settings {
-            theme: Some(theme.theme().slug.to_owned()),
-        }
-        .save();
+        self.settings.theme = Some(theme.theme().slug.to_owned());
+        self.settings.save();
         cx.notify();
     }
 
@@ -505,6 +525,7 @@ impl InfraPlot {
         );
         if before != self.editor.selection {
             self.editing = None;
+            self.hub.focus = None;
         }
         if out.focus_label {
             self.sync_inputs(window, cx);
@@ -1057,6 +1078,25 @@ impl InfraPlot {
                     }),
             )
             .child(
+                div()
+                    .relative()
+                    .child(
+                        ui.button("vault", self.menu == Some(Menu::Vault))
+                            .child(Ui::icon("vault", 15., ui.ink()))
+                            .child("Vault")
+                            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                                this.toggle_menu(Menu::Vault, window, cx);
+                            })),
+                    )
+                    .when(self.menu == Some(Menu::Vault), |d| {
+                        d.child(gpui::deferred(
+                            gpui::anchored()
+                                .snap_to_window_with_margin(px(8.))
+                                .child(self.render_vault_menu(cx)),
+                        ))
+                    }),
+            )
+            .child(
                 ui.button("save", false)
                     .child("Save")
                     .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.save(cx))),
@@ -1115,6 +1155,29 @@ impl InfraPlot {
                         this.editor.redo();
                         cx.notify();
                     })),
+            )
+            .child(
+                div()
+                    .relative()
+                    .child(
+                        ui.button("web", self.menu == Some(Menu::Web))
+                            .child(Ui::icon("web", 15., ui.ink()))
+                            .child(if self.hub.publishing {
+                                "Uploading…"
+                            } else {
+                                "Open in web"
+                            })
+                            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                                this.toggle_menu(Menu::Web, window, cx);
+                            })),
+                    )
+                    .when(self.menu == Some(Menu::Web), |d| {
+                        d.child(gpui::deferred(
+                            gpui::anchored()
+                                .snap_to_window_with_margin(px(8.))
+                                .child(self.render_web_menu(cx)),
+                        ))
+                    }),
             )
             .child(
                 ui.button("theme", false)
@@ -1335,6 +1398,17 @@ impl InfraPlot {
             .text_color(ui.ink());
 
         let (Some(id), Some(ty)) = (sel, ty) else {
+            match self.hub.focus.clone() {
+                Some(Focus::Host(h)) if self.hub.vault.is_some() => {
+                    return panel.child(self.render_host(&h, true, cx));
+                }
+                Some(Focus::Overview) if self.hub.vault.is_some() => {
+                    return panel.child(self.render_overview());
+                }
+                _ => {}
+            }
+            let e = &self.editor;
+            let doc = &e.doc;
             let look = doc.look;
             let stats = format!(
                 "{} zones · {} nodes · {} edges · {} lines · {} notes",
@@ -1393,8 +1467,15 @@ impl InfraPlot {
                     return panel;
                 };
                 let kind = n.kind;
-                let meta: Vec<(String, String)> =
-                    n.meta.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                let hidden = self.hidden_meta(&id);
+                let meta: Vec<(String, String)> = n
+                    .meta
+                    .iter()
+                    .filter(|(k, _)| {
+                        !hidden.contains(&k.as_str()) && (hidden.is_empty() || k.as_str() != "host")
+                    })
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
                 let picking = self.menu == Some(Menu::NodeKind);
                 panel = panel
                     .child(ui.row("Label", self.inputs.label.clone()))
@@ -1443,6 +1524,9 @@ impl InfraPlot {
                                 .child(div().w(px(90.)).text_color(ui.muted()).child(k))
                                 .child(div().flex_1().child(v))
                         }));
+                }
+                if let Some(vault) = self.render_node_vault(&id, cx) {
+                    panel = panel.child(vault);
                 }
             }
             ElementType::Zone => {
@@ -1666,7 +1750,20 @@ impl InfraPlot {
             .border_color(ui.line())
             .text_size(px(11.5))
             .text_color(ui.muted())
-            .child(div().flex_1().overflow_hidden().child(e.tool.hint()))
+            .child(
+                div()
+                    .flex_1()
+                    .overflow_hidden()
+                    .child(match &self.hub.scan {
+                        Some(p) => format!(
+                            "Scanning {} · {:.0}% · {} hosts found",
+                            self.hub.scan_label,
+                            p.fraction() * 100.0,
+                            p.found.load(std::sync::atomic::Ordering::Relaxed)
+                        ),
+                        None => e.tool.hint().to_owned(),
+                    }),
+            )
             .when_some(self.toast.as_ref(), |d, t| {
                 d.child(
                     div()
@@ -1685,7 +1782,7 @@ impl InfraPlot {
 
     fn render_confirm(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let ui = Ui { t: self.t() };
-        let pending = self.confirm;
+        let pending = self.confirm.clone();
         div()
             .id("confirm-backdrop")
             .occlude()
@@ -1733,9 +1830,12 @@ impl InfraPlot {
                             .child(
                                 ui.button("confirm-discard", false)
                                     .child("Don't save")
-                                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                                        if let Some(p) = pending {
-                                            this.run_pending(p, cx);
+                                    .on_click(cx.listener({
+                                        let pending = pending.clone();
+                                        move |this, _: &ClickEvent, _, cx| {
+                                            if let Some(p) = pending.clone() {
+                                                this.run_pending(p, cx);
+                                            }
                                         }
                                     })),
                             )
@@ -1745,7 +1845,7 @@ impl InfraPlot {
                                     if this.editor.path.is_some() {
                                         this.save(cx);
                                         if !this.editor.dirty
-                                            && let Some(p) = pending
+                                            && let Some(p) = pending.clone()
                                         {
                                             this.run_pending(p, cx);
                                         }
@@ -1797,6 +1897,7 @@ impl Render for InfraPlot {
     #[allow(clippy::too_many_lines)] // the action table
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_inputs(window, cx);
+        self.sync_hub(window, cx);
         let title = format!(
             "{}{} — infra-plot",
             if self.editor.dirty { "• " } else { "" },
@@ -1856,7 +1957,8 @@ impl Render for InfraPlot {
                 cx.notify();
             }))
             .on_action(cx.listener(|this, _: &Cancel, window, cx| {
-                if this.confirm.take().is_none() && this.menu.take().is_none() {
+                let dialog = std::mem::take(&mut this.hub.scan_dialog);
+                if this.confirm.take().is_none() && this.menu.take().is_none() && !dialog {
                     if this.canvas_focus.is_focused(window) {
                         this.editor.cancel();
                     } else {
@@ -1904,11 +2006,14 @@ impl Render for InfraPlot {
                     .flex()
                     .flex_1()
                     .min_h_0()
-                    .child(self.render_palette(cx))
+                    .child(self.render_sidebar(cx))
                     .child(self.render_canvas(cx))
                     .child(self.render_props(cx)),
             )
             .child(self.render_status())
+            .when(self.hub.scan_dialog, |d| {
+                d.child(self.render_scan_dialog(cx))
+            })
             .when(self.confirm.is_some(), |d| d.child(self.render_confirm(cx)));
 
         // Client-side decorations (Wayland): a transparent margin for the shadow, and resize
