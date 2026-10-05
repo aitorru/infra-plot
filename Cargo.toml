@@ -11,6 +11,7 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 infraplot-model = { path = "crates/infraplot-model" }
+infraplot-vault = { path = "crates/infraplot-vault" }
 anyhow = "1"
 axum = "0.8"
 clap = { version = "4", features = ["derive", "env"] }
@@ -23,6 +24,8 @@ gpui_platform = { package = "gpui-pre-platform", version = "=0.3.7", features = 
   "x11",
 ] }
 lyon = "1"
+# Only for nmap's XML output (already in the tree through gpui's SVG stack).
+roxmltree = "0.21"
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
