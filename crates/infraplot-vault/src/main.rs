@@ -126,6 +126,7 @@ fn main() -> anyhow::Result<()> {
             let mut v = open(args.vault.as_deref())?;
             let mut opts = v.scan_options();
             if !targets.is_empty() {
+                v.adopt_networks(&targets)?;
                 opts.targets = targets;
             }
             if !ports.is_empty() {

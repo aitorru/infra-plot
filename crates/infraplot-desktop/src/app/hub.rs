@@ -415,24 +415,10 @@ impl InfraPlot {
                 return;
             }
         };
-        // A vault without networks adopts the first ones it scans.
+        // Scanning a network makes it part of the vault (and of its diagram's zones).
         let Some(v) = &mut self.hub.vault else { return };
-        if v.config.networks.is_empty() {
-            let local = net::local_networks();
-            v.config.networks = targets
-                .iter()
-                .map(|&cidr| infraplot_vault::NetworkConfig {
-                    cidr,
-                    name: String::new(),
-                    gateway: local
-                        .iter()
-                        .find(|l| l.cidr == cidr)
-                        .and_then(|l| l.gateway),
-                })
-                .collect();
-            if let Err(e) = v.save_config() {
-                self.notify_msg(e.to_string(), true, cx);
-            }
+        if let Err(e) = v.adopt_networks(&targets) {
+            self.notify_msg(e.to_string(), true, cx);
         }
         let Some(v) = &self.hub.vault else { return };
         let mut opts = v.scan_options();
@@ -725,21 +711,20 @@ impl InfraPlot {
 
         let row = |id: SharedString, active: bool| {
             ui.button(id, active)
+                .flex_none()
                 .w_full()
                 .h(px(24.))
                 .text_size(px(12.))
                 .overflow_hidden()
         };
 
+        // A plain column inside the scroller: as flex items of the scroller itself the rows
+        // (which clip their overflow) would shrink to fit instead of scrolling.
         let mut panel = div()
-            .id("vault-panel")
             .flex()
             .flex_col()
-            .size_full()
             .px(px(10.))
             .pb(px(12.))
-            .overflow_y_scroll()
-            .bg(ui.panel())
             .child(
                 div()
                     .pt(px(10.))
@@ -882,10 +867,16 @@ impl InfraPlot {
                     .child("No hosts yet. Scan the network or import an nmap report."),
             );
         }
-        panel.children(hosts.into_iter().map(|h| {
+        let panel = panel.children(hosts.into_iter().map(|h| {
             let active = selected_host.as_deref() == Some(h.id.as_str())
                 || (self.editor.selection.is_none() && focus == Some(Focus::Host(h.id.clone())));
             let id = h.id.clone();
+            let name = h.name();
+            // Hosts without a name are already listed by their address.
+            let ip =
+                h.ip.map(|i| i.to_string())
+                    .filter(|ip| *ip != name)
+                    .unwrap_or_default();
             row(SharedString::from(format!("host-{}", h.id)), active)
                 .child(
                     div()
@@ -894,15 +885,16 @@ impl InfraPlot {
                         .rounded(px(4.))
                         .bg(hsla(status_color(t, &h))),
                 )
-                .child(div().flex_1().overflow_hidden().child(h.name()))
-                .child(
-                    div()
-                        .text_size(px(10.5))
-                        .text_color(ui.muted())
-                        .child(h.ip.map(|i| i.to_string()).unwrap_or_default()),
-                )
+                .child(div().flex_1().overflow_hidden().child(name))
+                .child(div().text_size(px(10.5)).text_color(ui.muted()).child(ip))
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.select_host(&id, cx)))
-        }))
+        }));
+        div()
+            .id("vault-panel")
+            .size_full()
+            .overflow_y_scroll()
+            .bg(ui.panel())
+            .child(panel)
     }
 
     /// Facts and notes of a host, for the properties panel.
@@ -927,6 +919,7 @@ impl InfraPlot {
         let fact = |k: &str, v: String| {
             div()
                 .flex()
+                .flex_none()
                 .gap(px(8.))
                 .py(px(2.))
                 .text_size(px(12.))

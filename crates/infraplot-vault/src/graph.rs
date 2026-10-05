@@ -33,7 +33,10 @@ pub const SCAN_KEYS: &[&str] = &[
     "last-seen",
 ];
 
-const COLS: usize = 6;
+/// Grid columns of a new zone grow with its hosts (about twice as wide as tall), within
+/// these bounds.
+const MIN_COLS: usize = 6;
+const MAX_COLS: usize = 16;
 const CELL_W: f64 = 140.0;
 const CELL_H: f64 = 140.0;
 // With 72-unit nodes these paddings put node centres and zone sides on the 20-unit grid.
@@ -224,19 +227,35 @@ fn add_edge(doc: &mut Diagram, from: &str, to: &str) {
     });
 }
 
+/// Columns for a new zone holding `hosts` nodes.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)] // small counts
+fn cols_for(hosts: usize) -> usize {
+    ((hosts as f64 * 2.0).sqrt().ceil() as usize).clamp(MIN_COLS, MAX_COLS)
+}
+
+/// Columns that fit in an existing zone `w` wide.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // small counts
+fn cols_in(w: f64) -> usize {
+    (((w - 2.0 * PAD_X - NODE_SIZE) / CELL_W).floor().max(0.0) as usize + 1).min(64)
+}
+
 /// Centre of grid cell `i` in a zone whose top-left corner is `(x, y)`.
 #[allow(clippy::cast_precision_loss)] // small grid indices
-fn cell(x: f64, y: f64, i: usize) -> [f64; 2] {
+fn cell(x: f64, y: f64, i: usize, cols: usize) -> [f64; 2] {
     [
-        x + PAD_X + NODE_SIZE / 2.0 + (i % COLS) as f64 * CELL_W,
-        y + PAD_TOP + NODE_SIZE / 2.0 + (i / COLS) as f64 * CELL_H,
+        x + PAD_X + NODE_SIZE / 2.0 + (i % cols) as f64 * CELL_W,
+        y + PAD_TOP + NODE_SIZE / 2.0 + (i / cols) as f64 * CELL_H,
     ]
 }
 
 #[allow(clippy::cast_precision_loss)]
-fn zone_size(cells: usize) -> (f64, f64) {
-    let rows = cells.div_ceil(COLS).max(1);
-    let cols = cells.clamp(1, COLS);
+fn zone_size(cells: usize, cols: usize) -> (f64, f64) {
+    let rows = cells.div_ceil(cols).max(1);
+    let cols = cells.clamp(1, cols);
     (
         2.0 * PAD_X + NODE_SIZE + (cols - 1) as f64 * CELL_W,
         PAD_TOP + NODE_SIZE + (rows - 1) as f64 * CELL_H + PAD_BOTTOM,
@@ -331,7 +350,7 @@ pub fn sync(doc: &mut Diagram, inv: &Inventory, networks: &[NetworkConfig]) -> S
             continue;
         }
         if !zone_exists {
-            let (w, h) = zone_size(missing.len());
+            let (w, h) = zone_size(missing.len(), cols_for(missing.len()));
             let x = doc_bounds(doc).map_or(0.0, |b| b.x + b.w + ZONE_GAP);
             let x = (x / 20.0).ceil() * 20.0;
             doc.zones.push(Zone {
@@ -351,10 +370,11 @@ pub fn sync(doc: &mut Diagram, inv: &Inventory, networks: &[NetworkConfig]) -> S
             });
             report.added_zones += 1;
         }
-        let (zx, zy) = {
-            let z = doc.zones.iter().find(|z| z.id == zid).map(|z| (z.x, z.y));
-            z.unwrap_or_default()
-        };
+        let (zx, zy, cols) = doc
+            .zones
+            .iter()
+            .find(|z| z.id == zid)
+            .map_or((0.0, 0.0, MIN_COLS), |z| (z.x, z.y, cols_in(z.w)));
 
         // Grid cells already taken by nodes inside the zone.
         let taken: HashSet<usize> = doc
@@ -368,8 +388,8 @@ pub fn sync(doc: &mut Diagram, inv: &Inventory, networks: &[NetworkConfig]) -> S
                     clippy::cast_sign_loss,
                     clippy::cast_precision_loss
                 )]
-                ((0.0..COLS as f64).contains(&col) && row >= 0.0)
-                    .then(|| row as usize * COLS + col as usize)
+                ((0.0..cols as f64).contains(&col) && row >= 0.0)
+                    .then(|| row as usize * cols + col as usize)
             })
             .collect();
         let mut free = (0..).filter(|i| !taken.contains(i));
@@ -377,13 +397,13 @@ pub fn sync(doc: &mut Diagram, inv: &Inventory, networks: &[NetworkConfig]) -> S
         for h in &missing {
             let i = free.next().unwrap_or_default();
             last = last.max(i);
-            let [x, y] = cell(zx, zy, i);
+            let [x, y] = cell(zx, zy, i, cols);
             let n = new_node(doc, h, guess_kind(h, false), x, y);
             doc.nodes.push(n);
             report.added_nodes += 1;
         }
         // Grow the zone to fit its grid.
-        let (min_w, min_h) = zone_size(last + 1);
+        let (min_w, min_h) = zone_size(last + 1, cols);
         if let Some(z) = doc.zones.iter_mut().find(|z| z.id == zid) {
             z.w = z.w.max(min_w);
             z.h = z.h.max(min_h);
@@ -501,7 +521,7 @@ mod tests {
             .find(|z| z.id == "net-192-168-1-0-24")
             .unwrap();
         let cam = node_for(&doc, "cam").unwrap();
-        let [x, y] = cell(zone.x, zone.y, 0);
+        let [x, y] = cell(zone.x, zone.y, 0, cols_in(zone.w));
         assert!((cam.x - x).abs() < 1e-9 && (cam.y - y).abs() < 1e-9);
         let nas = node_for(&doc, "nas").unwrap();
         assert_eq!(nas.label, "Main NAS");
@@ -509,6 +529,27 @@ mod tests {
         assert_eq!(nas.meta["status"], "down");
         assert_eq!(nas.color.as_deref(), Some(DOWN_COLOR));
         assert!(doc.validate().is_empty());
+    }
+
+    #[test]
+    fn big_networks_get_wide_zones() {
+        let mut inv = Inventory::default();
+        for i in 1..=140u8 {
+            let mut h = Host::new(format!("h{i}"));
+            h.ip = Some(Ipv4Addr::new(10, 20, 0, i));
+            inv.hosts.push(h);
+        }
+        let mut doc = Diagram::new("n");
+        sync(&mut doc, &inv, &[]);
+        let z = &doc.zones[0];
+        assert_eq!(cols_in(z.w), MAX_COLS);
+        assert!(z.w > z.h, "{} × {}", z.w, z.h);
+        for n in &doc.nodes {
+            assert!(
+                infraplot_model::geometry::zone_box(z)
+                    .contains(&infraplot_model::geometry::node_box(n))
+            );
+        }
     }
 
     #[test]

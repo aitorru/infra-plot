@@ -127,8 +127,23 @@ pub struct LocalNetwork {
     pub gateway: Option<Ipv4Addr>,
 }
 
-/// Networks on the interface that holds the default route (Linux: `/proc/net/route`).
-/// Empty elsewhere or when there is no default route.
+/// The default gateway (Linux: `/proc/net/route`).
+#[must_use]
+pub fn default_gateway() -> Option<Ipv4Addr> {
+    let table = std::fs::read_to_string("/proc/net/route").ok()?;
+    table.lines().skip(1).find_map(|l| {
+        let c: Vec<&str> = l.split_whitespace().collect();
+        let field = |i: usize| c.get(i).and_then(|s| u32::from_str_radix(s, 16).ok());
+        if field(1)? != 0 || field(7)? != 0 {
+            return None;
+        }
+        Some(Ipv4Addr::from(u32::from_be(field(2)?))).filter(|g| !g.is_unspecified())
+    })
+}
+
+/// Networks worth documenting on this machine (Linux: `/proc/net/route`): those of the
+/// interface holding the default route or, when that is a point-to-point link such as a
+/// VPN tunnel, the LANs of the other interfaces. Empty elsewhere.
 #[must_use]
 pub fn local_networks() -> Vec<LocalNetwork> {
     std::fs::read_to_string("/proc/net/route")
@@ -153,24 +168,40 @@ fn parse_routes(table: &str) -> Vec<LocalNetwork> {
             ))
         })
         .collect();
-    let Some(&(iface, _, gw, _)) = rows.iter().find(|r| r.1 == 0 && r.3 == 0) else {
-        return Vec::new();
-    };
-    let gw = Ipv4Addr::from(gw);
-    rows.iter()
-        .filter(|r| r.0 == iface && r.1 != 0 && r.2 == 0)
-        .map(|&(_, dest, _, m)| {
-            let cidr = Cidr::new(
-                Ipv4Addr::from(dest),
-                u8::try_from(m.count_ones()).unwrap_or(32),
-            );
-            LocalNetwork {
+    let default = rows.iter().find(|r| r.1 == 0 && r.3 == 0);
+    let gw = default.map(|r| Ipv4Addr::from(r.2));
+    // Directly attached subnets, leaving out point-to-point links (/31, /32), container and
+    // VM bridges, and anything too big to sweep.
+    let lans: Vec<LocalNetwork> = rows
+        .iter()
+        .filter(|r| r.1 != 0 && r.2 == 0)
+        .filter(|r| {
+            ![
+                "lo", "docker", "br-", "veth", "virbr", "podman", "cni", "flannel", "cali",
+            ]
+            .iter()
+            .any(|p| r.0.starts_with(p))
+        })
+        .filter_map(|&(iface, dest, _, m)| {
+            let prefix = u8::try_from(m.count_ones()).ok()?;
+            let cidr = Cidr::new(Ipv4Addr::from(dest), prefix);
+            (20..=30).contains(&prefix).then(|| LocalNetwork {
                 cidr,
                 interface: iface.to_owned(),
-                gateway: cidr.contains(gw).then_some(gw),
-            }
+                gateway: gw.filter(|g| cidr.contains(*g)),
+            })
         })
-        .collect()
+        .collect();
+    let on_default: Vec<LocalNetwork> = lans
+        .iter()
+        .filter(|n| default.is_some_and(|d| d.0 == n.interface))
+        .cloned()
+        .collect();
+    if on_default.is_empty() {
+        lans
+    } else {
+        on_default
+    }
 }
 
 #[cfg(test)]
@@ -206,9 +237,23 @@ mod tests {
             end0\t0001A8C0\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0\n\
             docker0\t000011AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n";
         let nets = parse_routes(table);
-        assert_eq!(nets.len(), 1);
+        assert_eq!(nets.len(), 1, "docker0 is left out");
         assert_eq!(nets[0].cidr.to_string(), "192.168.1.0/24");
         assert_eq!(nets[0].interface, "end0");
         assert_eq!(nets[0].gateway, Some(Ipv4Addr::new(192, 168, 1, 1)));
+    }
+
+    #[test]
+    fn skips_vpn_tunnels_for_the_lans_behind_them() {
+        // Default route through a tunnel with a /32 address; the LAN is on eth0.
+        let table = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n\
+            tun0\t00000000\t3100080A\t0003\t0\t0\t0\t00000000\t0\t0\t0\n\
+            tun0\t3100080A\t00000000\t0005\t0\t0\t0\tFFFFFFFF\t0\t0\t0\n\
+            eth0\t0000140A\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0\n";
+        let nets = parse_routes(table);
+        assert_eq!(nets.len(), 1);
+        assert_eq!(nets[0].cidr.to_string(), "10.20.0.0/24");
+        assert_eq!(nets[0].interface, "eth0");
+        assert_eq!(nets[0].gateway, None);
     }
 }

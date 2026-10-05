@@ -323,6 +323,38 @@ impl Vault {
         )
     }
 
+    /// Adds the networks of `targets` that the vault doesn't document yet (scanning a network
+    /// means it belongs in the vault), with the default gateway when it lies inside, and
+    /// drops point-to-point entries (/31, /32) such as a VPN address picked up by `init`.
+    /// Returns whether `vault.toml` changed.
+    pub fn adopt_networks(&mut self, targets: &[Cidr]) -> Result<bool, VaultError> {
+        let before = self.config.networks.clone();
+        let local = crate::net::local_networks();
+        let gateway = crate::net::default_gateway();
+        for &cidr in targets.iter().filter(|c| c.prefix <= 30) {
+            if self.config.networks.iter().any(|n| n.cidr == cidr) {
+                continue;
+            }
+            self.config.networks.push(NetworkConfig {
+                cidr,
+                name: local
+                    .iter()
+                    .find(|l| l.cidr == cidr)
+                    .map(|l| l.interface.clone())
+                    .unwrap_or_default(),
+                gateway: gateway.filter(|g| cidr.contains(*g)),
+            });
+        }
+        if self.config.networks.iter().any(|n| n.cidr.prefix <= 30) {
+            self.config.networks.retain(|n| n.cidr.prefix <= 30);
+        }
+        let changed = self.config.networks != before;
+        if changed {
+            self.save_config()?;
+        }
+        Ok(changed)
+    }
+
     /// Options for the built-in scanner: the configured networks and ports.
     #[must_use]
     pub fn scan_options(&self) -> ScanOptions {
@@ -498,7 +530,24 @@ mod tests {
             name: "LAN".into(),
             gateway: Some(Ipv4Addr::new(192, 168, 7, 1)),
         };
-        let mut v = Vault::init(&dir, Some("Acme HQ"), Some(vec![lan])).unwrap();
+        let vpn = NetworkConfig {
+            cidr: "10.8.0.49/32".parse().unwrap(),
+            name: "tun0".into(),
+            gateway: None,
+        };
+        let mut v = Vault::init(&dir, Some("Acme HQ"), Some(vec![vpn])).unwrap();
+        assert!(
+            v.adopt_networks(&[lan.cidr, "10.9.9.9/32".parse().unwrap()])
+                .unwrap()
+        );
+        assert_eq!(
+            v.config.networks.len(),
+            1,
+            "the VPN /32 goes, the LAN stays"
+        );
+        assert!(!v.adopt_networks(&[lan.cidr]).unwrap());
+        v.config.networks = vec![lan];
+        v.save_config().unwrap();
         assert!(Vault::is_vault(&dir));
         assert!(matches!(
             Vault::init(&dir, None, None),

@@ -106,14 +106,16 @@ generado importando un informe de nmap de una oficina ficticia.
   ~40 puertos TCP habituales en cada dirección (un host cuenta como vivo si acepta *o rechaza*
   la conexión), lee la caché ARP del kernel para las MAC y resuelve nombres con el sistema
   (`/etc/hosts`, DNS, mDNS). El progreso sale en el panel y en la barra de estado, y se puede
-  cancelar.
+  cancelar. Las redes que se escanean pasan a `vault.toml` (al crear el vault se ignoran los
+  enlaces punto a punto, como el `/32` de una VPN).
 - **Import nmap…** incorpora un informe de nmap, que aporta lo que un escaneo sin privilegios
   no ve (fabricante de la MAC, sistema operativo, versiones de los servicios):
   `sudo nmap -sS -sV -O -oX scan.xml 192.168.1.0/24`.
 - Cada escaneo o importación se fusiona con el inventario (por MAC y si no por IP: un equipo
   que cambia de IP por DHCP sigue siendo el mismo), marca como *down* los hosts de las redes
   barridas que no respondieron y actualiza `diagrams/network.toml`: una zona `subnet` por red
-  con sus hosts en rejilla, el gateway encima enlazado a la zona y a Internet, y un tipo de
+  con sus hosts en rejilla (más ancha cuantos más hosts), el gateway a la izquierda enlazado a
+  la zona y a Internet, y un tipo de
   nodo deducido de los puertos (DNS, base de datos, almacenamiento, impresora…). Solo se
   añade lo que falta y se refrescan los datos del escaneo en `meta`: lo que se haya movido,
   renombrado, coloreado o dibujado a mano se respeta. Si el diagrama está abierto, el cambio
