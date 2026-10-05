@@ -1,27 +1,24 @@
 [package]
 publish = false
-name = "infraplot-desktop"
-description = "infra-plot desktop editor (gpui)"
+name = "infraplot-vault"
+description = "infra-plot network vault: host inventory, network scanner, nmap import and topology diagrams"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [[bin]]
-name = "infra-plot"
+name = "infra-plot-vault"
 path = "src/main.rs"
 
 [dependencies]
 infraplot-model.workspace = true
-infraplot-vault.workspace = true
 anyhow.workspace = true
 clap.workspace = true
-gpui.workspace = true
-gpui_platform.workspace = true
-lyon.workspace = true
+roxmltree.workspace = true
 serde.workspace = true
+thiserror.workspace = true
 toml.workspace = true
-unicode-segmentation.workspace = true
 
 [lints]
 workspace = true

@@ -1,7 +1,9 @@
 //! infra-plot desktop: a native editor for infra-plot diagrams, built on gpui.
 //!
 //! Opens and saves the same JSON/TOML documents as the web editor, in a window without
-//! system decorations (it draws its own title bar).
+//! system decorations (it draws its own title bar). It also opens network vaults
+//! (`infraplot-vault`): folders documenting a network, with a scanner, a host inventory,
+//! Markdown notes and a topology diagram kept up to date.
 
 // Colours are written like their CSS counterparts (`0xf8f9fa`).
 #![allow(clippy::unreadable_literal)]
@@ -13,7 +15,9 @@ mod input;
 mod paint;
 mod settings;
 mod state;
+mod textarea;
 mod theme;
+mod web;
 
 use std::path::PathBuf;
 
@@ -23,6 +27,7 @@ use gpui::{
     WindowOptions, px, size,
 };
 use infraplot_model::Diagram;
+use infraplot_vault::Vault;
 
 use crate::app::InfraPlot;
 use crate::settings::Settings;
@@ -31,7 +36,8 @@ use crate::theme::ThemeName;
 #[derive(Debug, Parser)]
 #[command(name = "infra-plot", version, about)]
 struct Args {
-    /// Diagram to open (`.json` or `.toml`). Created when it doesn't exist yet.
+    /// Diagram to open (`.json` or `.toml`; created when it doesn't exist yet), or a vault
+    /// folder. Without it, the last vault opened.
     file: Option<PathBuf>,
     /// Colour theme: light, dark, solarized or nier (remembered between runs).
     #[arg(long, value_parser = parse_theme)]
@@ -51,10 +57,30 @@ fn main() -> anyhow::Result<()> {
         .unwrap_or(ThemeName::Light);
 
     // Read the file before opening a window, so a bad path fails on the terminal.
-    let (doc, path) = match args.file {
-        Some(p) if p.exists() => (Diagram::load(&p)?, Some(p)),
-        Some(p) => (Diagram::new(title_from(&p)), Some(p)),
-        None => (Diagram::new("Untitled diagram"), None),
+    let (doc, path, vault) = match args.file {
+        Some(p) if p.is_dir() => {
+            let root = Vault::find(&p).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "{} is not a vault: create one with `infra-plot-vault init` or Vault → New vault…",
+                    p.display()
+                )
+            })?;
+            (Diagram::new("Untitled diagram"), None, Some(root))
+        }
+        Some(p) if p.exists() => {
+            let vault = Vault::find(&p);
+            (Diagram::load(&p)?, Some(p), vault)
+        }
+        Some(p) => (Diagram::new(title_from(&p)), Some(p), None),
+        None => (
+            Diagram::new("Untitled diagram"),
+            None,
+            settings
+                .vault
+                .as_deref()
+                .map(PathBuf::from)
+                .filter(|d| Vault::is_vault(d)),
+        ),
     };
 
     gpui_platform::application()
@@ -64,6 +90,7 @@ fn main() -> anyhow::Result<()> {
                 eprintln!("infra-plot: could not load the bundled fonts: {e}");
             }
             input::bind_keys(cx);
+            textarea::bind_keys(cx);
             app::bind_keys(cx);
             let bounds = Bounds::centered(None, size(px(1400.), px(880.)), cx);
             let window = cx.open_window(
@@ -77,7 +104,15 @@ fn main() -> anyhow::Result<()> {
                     app_owns_titlebar_drag: true,
                     ..Default::default()
                 },
-                |window, cx| cx.new(|cx| InfraPlot::new(doc, path, theme, window, cx)),
+                |window, cx| {
+                    cx.new(|cx| {
+                        let mut app = InfraPlot::new(doc, path, theme, settings, window, cx);
+                        if let Some(dir) = vault {
+                            app.open_vault(&dir, cx);
+                        }
+                        app
+                    })
+                },
             );
             if let Err(e) = window {
                 eprintln!("infra-plot: could not open a window: {e:#}");

@@ -46,8 +46,9 @@ se recuerda en `~/.config/infra-plot/settings.toml`).
 
 ### Uso
 
-- Barra de título: New, Open…, Examples (los cuatro de `examples/`), Save, Save as…, deshacer
-  y rehacer, y el tema. Guardar escribe TOML o JSON según la extensión del fichero.
+- Barra de título: New, Open…, Examples (los cuatro de `examples/`), Vault (ver
+  [Vault de red](#vault-de-red)), Save, Save as…, deshacer y rehacer, Open in web y el tema.
+  Guardar escribe TOML o JSON según la extensión del fichero.
 - Paleta (izquierda): herramientas, tipos de zona y los 42 tipos de nodo con sus iconos.
   Clic en un tipo y luego en el lienzo para colocarlo.
 - Lienzo: mismas interacciones que la vista 2D web — mover (las zonas arrastran su
@@ -63,11 +64,96 @@ se recuerda en `~/.config/infra-plot/settings.toml`).
   `Ctrl+N` (nuevo), `Ctrl+=`/`Ctrl+-`/`Ctrl+0` (zoom) y `Ctrl+Q` (salir; pregunta si hay
   cambios sin guardar).
 
-Respecto al editor web, de momento no tiene vista 3D ni export SVG/PNG, y el look `sketch`
+Respecto al editor web, de momento no tiene vista 3D ni export SVG/PNG (para eso está
+[Open in web](#abrir-en-la-web)), y el look `sketch`
 se dibuja como `clean` (se conserva en el fichero). La geometría y las operaciones de edición
 están en `crates/infraplot-model` (`geometry.rs`, `ops.rs`, `catalog.rs`), espejo de
 `web/src/model/geometry.ts` y `web/src/state/ops.ts`; los iconos se generan desde
 `icons-clean.ts` con `gen-icons`.
+
+## Vault de red
+
+La app de escritorio también sirve para documentar una red: un **vault** es una carpeta de
+ficheros planos (TOML y Markdown, cómodos de versionar con git y legibles en GitHub u
+Obsidian) con el inventario de todo lo que hay en la red, una página de notas por equipo y
+diagramas, entre ellos una topología que se mantiene al día con cada escaneo.
+
+```text
+acme-hq/
+  vault.toml              nombre, redes a documentar y sus gateways, puertos a sondear
+  inventory.toml          todos los hosts conocidos (lo escribe infra-plot)
+  INVENTORY.md            el mismo inventario como tabla Markdown (se regenera)
+  README.md               resumen libre de la red
+  notes/<host>.md         documentación libre de cada host
+  diagrams/network.toml   topología generada a partir del inventario
+  diagrams/*.toml         cualquier otro diagrama
+  scans/<fecha>-<origen>.toml   resultado bruto de cada escaneo o importación
+```
+
+![Vault de ejemplo (examples/vault) en la app de escritorio, con la ficha y las notas de un host](docs/screenshots/desktop-vault.png)
+
+En [`examples/vault`](examples/vault) hay un vault de ejemplo (`infra-plot examples/vault`),
+generado importando un informe de nmap de una oficina ficticia.
+
+### En la app
+
+- **Vault → New vault…** crea un vault en una carpeta (detecta la red de la ruta por defecto
+  y su gateway); **Open vault…** abre uno existente. `infra-plot <carpeta>` también lo abre,
+  y sin argumentos se reabre el último vault.
+- El panel izquierdo pasa a tener dos pestañas: **Vault** (resumen, escaneo, diagramas del
+  vault y lista de hosts con filtro y estado) y **Shapes** (la paleta de siempre).
+- **Scan…** barre las redes indicadas (máximo 4096 direcciones) sin necesidad de root: prueba
+  ~40 puertos TCP habituales en cada dirección (un host cuenta como vivo si acepta *o rechaza*
+  la conexión), lee la caché ARP del kernel para las MAC y resuelve nombres con el sistema
+  (`/etc/hosts`, DNS, mDNS). El progreso sale en el panel y en la barra de estado, y se puede
+  cancelar. Las redes que se escanean pasan a `vault.toml` (al crear el vault se ignoran los
+  enlaces punto a punto, como el `/32` de una VPN).
+- **Import nmap…** incorpora un informe de nmap, que aporta lo que un escaneo sin privilegios
+  no ve (fabricante de la MAC, sistema operativo, versiones de los servicios):
+  `sudo nmap -sS -sV -O -oX scan.xml 192.168.1.0/24`.
+- Cada escaneo o importación se fusiona con el inventario (por MAC y si no por IP: un equipo
+  que cambia de IP por DHCP sigue siendo el mismo), marca como *down* los hosts de las redes
+  barridas que no respondieron y actualiza `diagrams/network.toml`: una zona `subnet` por red
+  con sus hosts en rejilla (más ancha cuantos más hosts), el gateway a la izquierda enlazado a
+  la zona y a Internet, y un tipo de
+  nodo deducido de los puertos (DNS, base de datos, almacenamiento, impresora…). Solo se
+  añade lo que falta y se refrescan los datos del escaneo en `meta`: lo que se haya movido,
+  renombrado, coloreado o dibujado a mano se respeta. Si el diagrama está abierto, el cambio
+  se aplica en el editor y se puede deshacer.
+- Los nodos se enlazan a su host con `meta.host`. Al seleccionar uno, el panel derecho
+  muestra la ficha del host (IP, MAC, fabricante, SO, nombres, puertos abiertos con servicio y
+  versión, primera y última vez visto) y un editor de **notas en Markdown** que se guarda al
+  escribir en `notes/<host>.md`. Un nodo sin host (un switch no gestionable, un servicio en la
+  nube, la línea del ISP) se puede añadir al inventario con **Add to the inventory**.
+- Clic en un host de la lista lo selecciona y centra en el diagrama; si no está en el diagrama
+  abierto, **Show in the network diagram** abre la topología. **Overview** edita el
+  `README.md` del vault.
+
+### Desde la terminal
+
+`infra-plot-vault` hace lo mismo sin pantalla, para lanzarlo desde cron o un servidor:
+
+```bash
+cargo install --locked --git https://github.com/aitorru/infra-plot infraplot-vault
+infra-plot-vault init acme-hq --name "Acme HQ" --network 192.168.1.0/24@192.168.1.1
+cd acme-hq
+infra-plot-vault scan                  # o: scan 10.0.0.0/24 --ports 22,80,443
+infra-plot-vault import scan.xml       # informe de nmap -oX
+infra-plot-vault hosts nas             # lista (filtrada) del inventario
+infra-plot-vault sync                  # regenera lo que falte en diagrams/network.toml
+```
+
+`--vault <carpeta>` (o `INFRAPLOT_VAULT`) elige el vault; por defecto, el que contiene el
+directorio actual.
+
+### Abrir en la web
+
+**Open in web** (barra de título) sube el diagrama abierto a un servidor de infra-plot
+(`PUT /api/diagrams/<id>`) y lo abre en el navegador en `/d/<id>`, con la vista 3D y los
+exports SVG/PNG. La URL del servidor se configura en el mismo menú (por defecto
+`http://127.0.0.1:31080`, el binario `infraplot-server`; en desarrollo vale también
+`http://localhost:31173`) y se recuerda en `settings.toml`. El id sale del nombre del fichero
+(prefijado con el nombre del vault si el diagrama es de uno). `https://` usa `curl`.
 
 ## Desarrollo
 
@@ -81,7 +167,8 @@ devenv shell -- dev    # o `devenv up`
 - API (Axum): http://127.0.0.1:31080, proxificada por Vite en `/api`
 
 Otros comandos del shell: `lint`, `build`, `gen-schema`, `gen-icons` (iconos de la app de
-escritorio) y `desktop [fichero]` (la app de escritorio).
+escritorio), `desktop [fichero|vault]` (la app de escritorio) y `vault …` (la CLI
+`infra-plot-vault`).
 
 ### Perfiles
 

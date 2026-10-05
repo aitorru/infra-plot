@@ -1,0 +1,264 @@
+version = 1
+title = "Acme HQ network"
+
+[[zones]]
+id = "net-192-168-10-0-24"
+kind = "subnet"
+label = "192.168.10.0/24"
+x = 0.0
+y = 0.0
+w = 860.0
+h = 320.0
+
+[[nodes]]
+id = "core-sw"
+kind = "switch"
+label = "core-sw"
+x = 80.0
+y = 100.0
+
+[nodes.meta]
+host = "core-sw"
+hostname = "core-sw.acme.lan"
+ip = "192.168.10.2"
+last-seen = "2026-10-05"
+mac = "00:1a:2b:00:00:02"
+os = "Linux 4.x"
+ports = "22, 443"
+status = "up"
+vendor = "Ubiquiti Networks"
+
+[[nodes]]
+id = "nas"
+kind = "storage"
+label = "nas"
+x = 220.0
+y = 100.0
+
+[nodes.meta]
+host = "nas"
+hostname = "nas.acme.lan"
+ip = "192.168.10.10"
+last-seen = "2026-10-05"
+mac = "00:11:32:aa:bb:01"
+os = "Linux 5.10"
+ports = "22, 445, 2049, 5000"
+status = "up"
+vendor = "Synology"
+
+[[nodes]]
+id = "pve"
+kind = "server"
+label = "pve"
+x = 360.0
+y = 100.0
+
+[nodes.meta]
+host = "pve"
+hostname = "pve.acme.lan"
+ip = "192.168.10.11"
+last-seen = "2026-10-05"
+mac = "52:54:00:12:34:01"
+os = "Linux 6.8"
+ports = "22, 8006"
+status = "up"
+vendor = "QEMU virtual NIC"
+
+[[nodes]]
+id = "db"
+kind = "database"
+label = "db"
+x = 500.0
+y = 100.0
+
+[nodes.meta]
+host = "db"
+hostname = "db.acme.lan"
+ip = "192.168.10.20"
+last-seen = "2026-10-05"
+mac = "52:54:00:12:34:20"
+os = "Linux 6.1"
+ports = "22, 5432"
+status = "up"
+vendor = "QEMU virtual NIC"
+
+[[nodes]]
+id = "cache"
+kind = "cache"
+label = "cache"
+x = 640.0
+y = 100.0
+
+[nodes.meta]
+host = "cache"
+hostname = "cache.acme.lan"
+ip = "192.168.10.21"
+last-seen = "2026-10-05"
+mac = "52:54:00:12:34:21"
+os = "Linux 6.1"
+ports = "22, 6379"
+status = "up"
+vendor = "QEMU virtual NIC"
+
+[[nodes]]
+id = "grafana"
+kind = "monitoring"
+label = "grafana"
+x = 780.0
+y = 100.0
+
+[nodes.meta]
+host = "grafana"
+hostname = "grafana.acme.lan"
+ip = "192.168.10.22"
+last-seen = "2026-10-05"
+mac = "52:54:00:12:34:22"
+os = "Linux 6.1"
+ports = "22, 3000, 9090"
+status = "up"
+vendor = "QEMU virtual NIC"
+
+[[nodes]]
+id = "dc01"
+kind = "dns"
+label = "dc01"
+x = 80.0
+y = 240.0
+
+[nodes.meta]
+host = "dc01"
+hostname = "dc01.acme.lan"
+ip = "192.168.10.30"
+last-seen = "2026-10-05"
+mac = "52:54:00:12:34:30"
+os = "Microsoft Windows Server 2022"
+ports = "53, 88, 389, 445, 3389"
+status = "up"
+vendor = "QEMU virtual NIC"
+
+[[nodes]]
+id = "printer-2f"
+kind = "client"
+label = "printer-2f"
+x = 220.0
+y = 240.0
+
+[nodes.meta]
+host = "printer-2f"
+hostname = "printer-2f.acme.lan"
+ip = "192.168.10.40"
+last-seen = "2026-10-05"
+mac = "3c:2a:f4:00:00:40"
+ports = "80, 515, 631, 9100"
+status = "up"
+vendor = "Brother Industries"
+
+[[nodes]]
+id = "ha"
+kind = "server"
+label = "ha"
+x = 360.0
+y = 240.0
+
+[nodes.meta]
+host = "ha"
+hostname = "ha.acme.lan"
+ip = "192.168.10.50"
+last-seen = "2026-10-05"
+mac = "e4:5f:01:00:00:50"
+os = "Linux 6.6"
+ports = "22, 8123"
+status = "up"
+vendor = "Raspberry Pi Trading"
+
+[[nodes]]
+id = "macbook-ana"
+kind = "mobile"
+label = "macbook-ana"
+x = 500.0
+y = 240.0
+
+[nodes.meta]
+host = "macbook-ana"
+hostname = "macbook-ana.acme.lan"
+ip = "192.168.10.101"
+last-seen = "2026-10-05"
+mac = "f0:18:98:00:01:01"
+os = "Apple macOS 14"
+status = "up"
+vendor = "Apple"
+
+[[nodes]]
+id = "pc-luis"
+kind = "client"
+label = "pc-luis"
+x = 640.0
+y = 240.0
+
+[nodes.meta]
+host = "pc-luis"
+hostname = "pc-luis.acme.lan"
+ip = "192.168.10.102"
+last-seen = "2026-10-05"
+mac = "8c:16:45:00:01:02"
+os = "Microsoft Windows 11"
+ports = "135, 445, 3389"
+status = "up"
+vendor = "Lenovo"
+
+[[nodes]]
+id = "iphone-marta"
+kind = "mobile"
+label = "iphone-marta"
+x = 780.0
+y = 240.0
+
+[nodes.meta]
+host = "iphone-marta"
+hostname = "iphone-marta.acme.lan"
+ip = "192.168.10.103"
+last-seen = "2026-10-05"
+mac = "a4:83:e7:00:01:03"
+status = "up"
+vendor = "Apple"
+
+[[nodes]]
+id = "gw"
+kind = "router"
+label = "gw"
+x = -160.0
+y = 160.0
+
+[nodes.meta]
+host = "gw"
+hostname = "gw.acme.lan"
+ip = "192.168.10.1"
+last-seen = "2026-10-05"
+mac = "00:1a:2b:00:00:01"
+os = "MikroTik RouterOS 7"
+ports = "53, 80, 443, 8291"
+status = "up"
+vendor = "MikroTik"
+
+[[nodes]]
+id = "internet"
+kind = "internet"
+label = "Internet"
+x = -340.0
+y = 160.0
+
+[[edges]]
+id = "link-1"
+from = "gw"
+to = "net-192-168-10-0-24"
+style = "solid"
+arrow = "none"
+route = "straight"
+
+[[edges]]
+id = "link-2"
+from = "internet"
+to = "gw"
+style = "solid"
+arrow = "none"
+route = "straight"

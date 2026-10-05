@@ -55,6 +55,15 @@ fn ui_svg(name: &str) -> Option<&'static str> {
         "theme" => svg!(
             r##"<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="#fff"/>"##
         ),
+        "vault" => svg!(
+            r##"<path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="13.5" r="2"/><path d="M12 15.5v2"/>"##
+        ),
+        "scan" => svg!(
+            r##"<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6-6"/><circle cx="12" cy="12" r="1" fill="#fff"/>"##
+        ),
+        "web" => svg!(
+            r##"<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.6 5.4 3.6 8.5s-1.1 5.9-3.6 8.5M12 3.5C9.5 6.1 8.4 8.9 8.4 12s1.1 5.9 3.6 8.5"/>"##
+        ),
         "logo" => svg!(
             r##"<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/><path d="M11 7h4a2 2 0 0 1 2 2v4"/>"##
         ),
@@ -104,7 +113,9 @@ mod tests {
 
     #[test]
     fn assets_resolve() {
-        assert!(Assets.load("ui/close.svg").unwrap().is_some());
+        for ui in ["close", "vault", "scan", "web"] {
+            assert!(Assets.load(&format!("ui/{ui}.svg")).unwrap().is_some());
+        }
         assert!(Assets.load("icons/load-balancer.svg").unwrap().is_some());
         assert!(Assets.load("icons/database.body.svg").unwrap().is_some());
         assert!(Assets.load("icons/nope.svg").unwrap().is_none());
