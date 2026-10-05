@@ -92,6 +92,11 @@ in
       cd "$DEVENV_ROOT"
       cargo run --quiet -p infraplot-desktop -- "$@"
     '';
+    # Network vaults from the command line: `vault init`, `vault scan`, `vault import`...
+    vault.exec = ''
+      set -euo pipefail
+      cargo run --quiet --manifest-path "$DEVENV_ROOT/Cargo.toml" -p infraplot-vault -- "$@"
+    '';
     check-playwright-version.exec = ''
       set -euo pipefail
       npm_version=$(jq -r '.devDependencies["@playwright/test"]' "$DEVENV_ROOT/e2e/package.json")
@@ -174,7 +179,7 @@ in
     echo "infra-plot dev shell · rust $(rustc --version | cut -d' ' -f2) · node $(node --version)"
     echo "  dev (o devenv up) → vite :$INFRAPLOT_WEB_PORT (abre esto) + api :$INFRAPLOT_API_PORT"
     echo "  lint | build | gen-schema | gen-icons · e2e corre en CI (o: devenv --profile e2e shell -- e2e)"
-    echo "  desktop [fichero] → editor de escritorio (gpui)"
+    echo "  desktop [fichero|vault] → editor de escritorio (gpui) · vault <init|scan|import|hosts|sync>"
   '';
 
   enterTest = ''

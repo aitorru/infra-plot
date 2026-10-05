@@ -1,0 +1,249 @@
+source = "nmap"
+started = "2026-10-05T09:41:00Z"
+finished = "2026-10-05T09:46:00Z"
+port_scan = true
+
+[[hosts]]
+ip = "192.168.10.1"
+mac = "00:1a:2b:00:00:01"
+hostnames = ["gw.acme.lan"]
+vendor = "MikroTik"
+os = "MikroTik RouterOS 7"
+
+[[hosts.ports]]
+port = 53
+service = "domain"
+product = "dnsmasq 2.90"
+
+[[hosts.ports]]
+port = 80
+service = "http"
+product = "MikroTik router config page"
+
+[[hosts.ports]]
+port = 443
+service = "https"
+
+[[hosts.ports]]
+port = 8291
+service = "unknown"
+
+[[hosts]]
+ip = "192.168.10.2"
+mac = "00:1a:2b:00:00:02"
+hostnames = ["core-sw.acme.lan"]
+vendor = "Ubiquiti Networks"
+os = "Linux 4.x"
+
+[[hosts.ports]]
+port = 22
+service = "ssh"
+product = "Dropbear sshd 2022.83"
+
+[[hosts.ports]]
+port = 443
+service = "https"
+product = "lighttpd"
+
+[[hosts]]
+ip = "192.168.10.10"
+mac = "00:11:32:aa:bb:01"
+hostnames = ["nas.acme.lan"]
+vendor = "Synology"
+os = "Linux 5.10"
+
+[[hosts.ports]]
+port = 22
+service = "ssh"
+product = "OpenSSH 9.6"
+
+[[hosts.ports]]
+port = 445
+service = "microsoft-ds"
+product = "Samba smbd 4.19"
+
+[[hosts.ports]]
+port = 2049
+service = "nfs"
+
+[[hosts.ports]]
+port = 5000
+service = "http"
+product = "nginx"
+
+[[hosts]]
+ip = "192.168.10.11"
+mac = "52:54:00:12:34:01"
+hostnames = ["pve.acme.lan"]
+vendor = "QEMU virtual NIC"
+os = "Linux 6.8"
+
+[[hosts.ports]]
+port = 22
+service = "ssh"
+product = "OpenSSH 9.2p1"
+
+[[hosts.ports]]
+port = 8006
+service = "https"
+product = "pve-api-daemon"
+
+[[hosts]]
+ip = "192.168.10.20"
+mac = "52:54:00:12:34:20"
+hostnames = ["db.acme.lan"]
+vendor = "QEMU virtual NIC"
+os = "Linux 6.1"
+
+[[hosts.ports]]
+port = 22
+service = "ssh"
+product = "OpenSSH 9.2p1"
+
+[[hosts.ports]]
+port = 5432
+service = "postgresql"
+product = "PostgreSQL DB 16.4"
+
+[[hosts]]
+ip = "192.168.10.21"
+mac = "52:54:00:12:34:21"
+hostnames = ["cache.acme.lan"]
+vendor = "QEMU virtual NIC"
+os = "Linux 6.1"
+
+[[hosts.ports]]
+port = 22
+service = "ssh"
+product = "OpenSSH 9.2p1"
+
+[[hosts.ports]]
+port = 6379
+service = "redis"
+product = "Redis key-value store 7.2.5"
+
+[[hosts]]
+ip = "192.168.10.22"
+mac = "52:54:00:12:34:22"
+hostnames = ["grafana.acme.lan"]
+vendor = "QEMU virtual NIC"
+os = "Linux 6.1"
+
+[[hosts.ports]]
+port = 22
+service = "ssh"
+product = "OpenSSH 9.2p1"
+
+[[hosts.ports]]
+port = 3000
+service = "http"
+product = "Grafana"
+
+[[hosts.ports]]
+port = 9090
+service = "http"
+product = "Prometheus"
+
+[[hosts]]
+ip = "192.168.10.30"
+mac = "52:54:00:12:34:30"
+hostnames = ["dc01.acme.lan"]
+vendor = "QEMU virtual NIC"
+os = "Microsoft Windows Server 2022"
+
+[[hosts.ports]]
+port = 53
+service = "domain"
+product = "Simple DNS Plus"
+
+[[hosts.ports]]
+port = 88
+service = "kerberos-sec"
+product = "Microsoft Windows Kerberos"
+
+[[hosts.ports]]
+port = 389
+service = "ldap"
+product = "Microsoft Windows Active Directory LDAP"
+
+[[hosts.ports]]
+port = 445
+service = "microsoft-ds"
+
+[[hosts.ports]]
+port = 3389
+service = "ms-wbt-server"
+product = "Microsoft Terminal Services"
+
+[[hosts]]
+ip = "192.168.10.40"
+mac = "3c:2a:f4:00:00:40"
+hostnames = ["printer-2f.acme.lan"]
+vendor = "Brother Industries"
+
+[[hosts.ports]]
+port = 80
+service = "http"
+product = "Debut embedded httpd"
+
+[[hosts.ports]]
+port = 515
+service = "printer"
+
+[[hosts.ports]]
+port = 631
+service = "ipp"
+
+[[hosts.ports]]
+port = 9100
+service = "jetdirect"
+
+[[hosts]]
+ip = "192.168.10.50"
+mac = "e4:5f:01:00:00:50"
+hostnames = ["ha.acme.lan"]
+vendor = "Raspberry Pi Trading"
+os = "Linux 6.6"
+
+[[hosts.ports]]
+port = 22
+service = "ssh"
+product = "OpenSSH 9.2p1"
+
+[[hosts.ports]]
+port = 8123
+service = "http"
+product = "Home Assistant"
+
+[[hosts]]
+ip = "192.168.10.101"
+mac = "f0:18:98:00:01:01"
+hostnames = ["macbook-ana.acme.lan"]
+vendor = "Apple"
+os = "Apple macOS 14"
+
+[[hosts]]
+ip = "192.168.10.102"
+mac = "8c:16:45:00:01:02"
+hostnames = ["pc-luis.acme.lan"]
+vendor = "Lenovo"
+os = "Microsoft Windows 11"
+
+[[hosts.ports]]
+port = 135
+service = "msrpc"
+product = "Microsoft Windows RPC"
+
+[[hosts.ports]]
+port = 445
+service = "microsoft-ds"
+
+[[hosts.ports]]
+port = 3389
+service = "ms-wbt-server"
+
+[[hosts]]
+ip = "192.168.10.103"
+mac = "a4:83:e7:00:01:03"
+hostnames = ["iphone-marta.acme.lan"]
+vendor = "Apple"
