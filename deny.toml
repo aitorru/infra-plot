@@ -4,6 +4,15 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+# All transitive through gpui (desktop app), with no fixed release reachable from it yet.
+# Revisit when bumping gpui-pre.
+ignore = [
+  { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; gpui and its macOS backend use it at build time" },
+  { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained; pulled by gpui's font stack" },
+  { id = "RUSTSEC-2026-0206", reason = "rustybuzz is unmaintained; pulled by usvg (gpui's SVG renderer)" },
+  { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.38 via zbus_xml (accesskit/AT-SPI); only parses D-Bus introspection XML from the session bus" },
+  { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.38 via zbus_xml (accesskit/AT-SPI); only parses D-Bus introspection XML from the session bus" },
+]
 
 [licenses]
 version = 2
@@ -17,6 +26,11 @@ allow = [
   "ISC",
   "Unicode-3.0",
   "Zlib",
+  # Only reached through the desktop app's gpui/wgpu stack: MPL-2.0 (font-kit, cbindgen,
+  # option-ext, dwrote), CC0-1.0 (hexf-parse, tiny-keccak) and bzip2-1.0.6 (libbz2-rs-sys).
+  "MPL-2.0",
+  "CC0-1.0",
+  "bzip2-1.0.6",
 ]
 
 [bans]

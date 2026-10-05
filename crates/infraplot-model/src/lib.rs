@@ -8,9 +8,14 @@
 //! in the 2D view at 100% zoom). `x` grows to the right and `y` grows downwards.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::Path;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+pub mod catalog;
+pub mod geometry;
+pub mod ops;
 
 pub const FORMAT_VERSION: u32 = 1;
 
@@ -283,7 +288,81 @@ pub enum ParseError {
     Toml(#[from] toml::de::Error),
 }
 
+/// On-disk encoding of a document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Format {
+    Json,
+    Toml,
+}
+
+impl Format {
+    /// Picks the format from the file extension, falling back to sniffing the contents.
+    #[must_use]
+    pub fn detect(path: &Path, src: &str) -> Self {
+        match path.extension().and_then(|e| e.to_str()) {
+            Some(e) if e.eq_ignore_ascii_case("toml") => Self::Toml,
+            Some(e) if e.eq_ignore_ascii_case("json") => Self::Json,
+            _ if src.trim_start().starts_with('{') => Self::Json,
+            _ => Self::Toml,
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum FileError {
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Parse(#[from] ParseError),
+    #[error("invalid diagram: {}", .0.iter().map(|i| format!("{}: {}", i.path, i.message)).collect::<Vec<_>>().join("; "))]
+    Invalid(Vec<Issue>),
+    #[error("cannot encode as TOML: {0}")]
+    Toml(#[from] toml::ser::Error),
+}
+
 impl Diagram {
+    /// Parses `src` in the given format.
+    pub fn parse(src: &str, format: Format) -> Result<Self, ParseError> {
+        match format {
+            Format::Json => Self::from_json(src),
+            Format::Toml => Self::from_toml(src),
+        }
+    }
+
+    /// Encodes the diagram in the given format.
+    pub fn encode(&self, format: Format) -> Result<String, toml::ser::Error> {
+        match format {
+            Format::Json => Ok(self.to_json() + "\n"),
+            Format::Toml => self.to_toml(),
+        }
+    }
+
+    /// Reads and validates a `.json` / `.toml` file.
+    pub fn load(path: &Path) -> Result<Self, FileError> {
+        let src = std::fs::read_to_string(path)?;
+        let diagram = Self::parse(&src, Format::detect(path, &src))?;
+        let issues = diagram.validate();
+        if issues.is_empty() {
+            Ok(diagram)
+        } else {
+            Err(FileError::Invalid(issues))
+        }
+    }
+
+    /// Writes the diagram atomically, as TOML or JSON depending on the extension
+    /// (JSON when there is none).
+    pub fn save(&self, path: &Path) -> Result<(), FileError> {
+        let format = Format::detect(path, "{");
+        let out = self.encode(format)?;
+        let name = path
+            .file_name()
+            .map_or_else(Default::default, |n| n.to_string_lossy());
+        let tmp = path.with_file_name(format!(".{name}.tmp"));
+        std::fs::write(&tmp, out)?;
+        std::fs::rename(&tmp, path)?;
+        Ok(())
+    }
+
     pub fn from_json(src: &str) -> Result<Self, ParseError> {
         Ok(serde_json::from_str(src)?)
     }
@@ -472,6 +551,30 @@ y = 0
         let d = diagram(r#"look = "sketch""#);
         assert_eq!(d.look, Look::Sketch);
         assert!(d.to_json().contains(r#""look": "sketch""#));
+    }
+
+    #[test]
+    fn files_round_trip_in_the_format_of_their_extension() {
+        let dir = std::env::temp_dir().join(format!("infraplot-model-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let d = diagram("");
+        for (name, json) in [("d.toml", false), ("d.json", true)] {
+            let path = dir.join(name);
+            d.save(&path).unwrap();
+            let raw = std::fs::read_to_string(&path).unwrap();
+            assert_eq!(raw.trim_start().starts_with('{'), json);
+            assert_eq!(Diagram::load(&path).unwrap(), d);
+        }
+        std::fs::write(
+            dir.join("bad.toml"),
+            "version = 1\ntitle = \"t\"\n[[edges]]\nid = \"e\"\nfrom = \"a\"\nto = \"b\"\n",
+        )
+        .unwrap();
+        assert!(matches!(
+            Diagram::load(&dir.join("bad.toml")),
+            Err(FileError::Invalid(issues)) if issues.len() == 2
+        ));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
