@@ -30,6 +30,15 @@ struct Args {
     /// Built web client (`web/dist`). When absent only the API is served.
     #[arg(long, env = "INFRAPLOT_STATIC_DIR")]
     static_dir: Option<PathBuf>,
+    /// Shared token the API requires in `X-Infraplot-Token`. Mandatory when
+    /// `--bind` is not a loopback address.
+    #[arg(long, env = "INFRAPLOT_TOKEN")]
+    token: Option<String>,
+}
+
+/// A token is mandatory whenever the API is reachable from outside this machine.
+fn requires_token(bind: &SocketAddr) -> bool {
+    !bind.ip().is_loopback()
 }
 
 #[tokio::main]
@@ -41,11 +50,20 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let args = Args::parse();
+    if requires_token(&args.bind) && args.token.is_none() {
+        anyhow::bail!(
+            "refusing to listen on {} without a token: bind a loopback address or set INFRAPLOT_TOKEN",
+            args.bind
+        );
+    }
+    if args.token.is_none() {
+        tracing::warn!("no INFRAPLOT_TOKEN set: the API is unauthenticated (loopback bind only)");
+    }
     let store = store::Store::open(&args.data_dir)
         .await
         .with_context(|| format!("opening data dir {}", args.data_dir.display()))?;
 
-    let mut app = Router::new().nest("/api", api::router(store));
+    let mut app = Router::new().nest("/api", api::router(store, args.token.clone()));
     match &args.static_dir {
         Some(dir) if dir.join("index.html").is_file() => {
             tracing::info!(dir = %dir.display(), "serving web client");
@@ -87,5 +105,27 @@ async fn shutdown_signal() {
     tokio::select! {
         () = ctrl_c => {},
         () = term => {},
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn addr(text: &str) -> SocketAddr {
+        text.parse().unwrap()
+    }
+
+    #[test]
+    fn loopback_binds_do_not_require_a_token() {
+        assert!(!requires_token(&addr("127.0.0.1:31080")));
+        assert!(!requires_token(&addr("[::1]:31080")));
+    }
+
+    #[test]
+    fn other_binds_require_a_token() {
+        assert!(requires_token(&addr("0.0.0.0:31080")));
+        assert!(requires_token(&addr("[::]:31080")));
+        assert!(requires_token(&addr("192.168.1.10:31080")));
     }
 }
