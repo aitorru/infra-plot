@@ -83,6 +83,24 @@ devenv shell -- dev    # o `devenv up`
 Otros comandos del shell: `lint`, `build`, `gen-schema`, `gen-icons` (iconos de la app de
 escritorio) y `desktop [fichero]` (la app de escritorio).
 
+### API: origen y token
+
+La API rechaza cualquier petición cuyo `Origin` no sea el suyo (o, en desarrollo, otra
+dirección de loopback: Vite proxifica `/api` desde `localhost:31173` a `127.0.0.1:31080`).
+Así una web cualquiera no puede escribir tus diagramas con un `PUT` cross-origin.
+
+En loopback no hace falta token: `devenv shell -- dev` sigue funcionando igual. Si escuchas en
+otra interfaz, el servidor exige `INFRAPLOT_TOKEN` y no arranca sin él:
+
+```bash
+INFRAPLOT_TOKEN=$(openssl rand -hex 32) devenv shell -- \
+  cargo run -p infraplot-server -- --bind 0.0.0.0:31080
+```
+
+Las peticiones a la API deben llevar entonces la cabecera `X-Infraplot-Token: <token>`.
+`GET /api/health` queda abierto para sondas. El cliente web servido por el propio servidor
+todavía no manda el token: exponerlo fuera de loopback es parte de la issue #5.
+
 ### Perfiles
 
 El shell por defecto es mínimo para no llenar el disco:
